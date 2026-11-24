@@ -1,0 +1,131 @@
+<title>__TITLE__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,650&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: single reading column (~72ch) under a slim sticky bar holding the EN/PL switch; tables scroll inside their own frames. */
+:root {
+  --paper: #f6f7f9;
+  --surface: #ffffff;
+  --ink: #1b2230;
+  --muted: #5a6476;
+  --rule: #d9dee7;
+  --accent: #b4232f;      /* crimson */
+  --accent-soft: #f7e3e5;
+  --code-bg: #eef1f5;
+  --font-display: "Newsreader", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12161d; --surface: #1a1f28; --ink: #e5e8ee; --muted: #9aa3b4;
+    --rule: #2d3442; --accent: #f0707a; --accent-soft: #3a1f24; --code-bg: #222835;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #12161d; --surface: #1a1f28; --ink: #e5e8ee; --muted: #9aa3b4;
+  --rule: #2d3442; --accent: #f0707a; --accent-soft: #3a1f24; --code-bg: #222835;
+  color-scheme: dark;
+}
+body { background: var(--paper); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.6; }
+.bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+  background: var(--paper); border-bottom: 1px solid var(--rule);
+}
+.bar-inner, main { max-width: 76ch; margin: 0 auto; padding-inline: 16px; }
+.bar-inner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 10px; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.switch { display: inline-flex; border: 1px solid var(--rule); border-radius: 999px; padding: 3px; background: var(--surface); }
+.switch button {
+  font: 600 13px/1 var(--font-body); letter-spacing: .04em; border: 0; background: transparent; color: var(--muted);
+  padding: 7px 14px; border-radius: 999px; cursor: pointer;
+}
+.switch button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+.switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+main { padding-block: 28px 64px; }
+article { min-width: 0; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; }
+h1 { font-size: clamp(28px, 5vw, 40px); font-weight: 650; margin: 8px 0 20px; }
+h2 { font-size: 26px; font-weight: 650; margin: 44px 0 12px; padding-top: 14px; border-top: 2px solid var(--ink); }
+h3 { font-size: 20px; margin: 28px 0 8px; }
+article > p:first-of-type { font-size: 18px; }
+article > p:first-of-type strong:first-child, article > p:first-of-type strong { color: var(--accent); }
+a { color: var(--accent); text-underline-offset: 2px; overflow-wrap: anywhere; }
+hr { border: 0; border-top: 1px solid var(--rule); margin: 36px 0; }
+ul, ol { padding-left: 1.3em; }
+li { margin: 6px 0; }
+blockquote { margin: 0; padding: 4px 16px; border-left: 3px solid var(--accent); color: var(--muted); }
+code { font-family: var(--font-mono); font-size: .9em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+.tbl { overflow-x: auto; margin: 16px 0 20px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--rule); }
+th { font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); background: var(--code-bg); }
+tr:last-child td { border-bottom: 0; }
+td strong { color: var(--accent); }
+.fallback { white-space: pre-wrap; font-family: var(--font-mono); font-size: 13px; }
+footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
+@media (prefers-reduced-motion: no-preference) { article { animation: fade .25s ease-out; } }
+@keyframes fade { from { opacity: .4; } to { opacity: 1; } }
+</style>
+
+<header class="bar">
+  <div class="bar-inner">
+    <span class="eyebrow" id="eyebrow">__EYEBROW_EN__</span>
+    <div class="switch" role="group" aria-label="Language / Język">
+      <button type="button" id="btn-en" data-lang="en" aria-pressed="true">EN</button>
+      <button type="button" id="btn-l2" data-lang="__L2__" aria-pressed="false">__L2_LABEL__</button>
+    </div>
+  </div>
+</header>
+<main>
+  <article id="doc-en" lang="en"></article>
+  <article id="doc-__L2__" lang="__L2__" hidden></article>
+</main>
+
+<script type="text/markdown" id="md-en">
+__MD_EN__
+</script>
+<script type="text/markdown" id="md-__L2__">
+__MD_L2__
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script>
+(function () {
+  var L2 = "__L2__";
+  var eyebrow = { en: "__EYEBROW_EN__" };
+  eyebrow[L2] = "__EYEBROW_L2__";
+  function render(lang) {
+    var src = document.getElementById("md-" + lang).textContent;
+    var el = document.getElementById("doc-" + lang);
+    if (window.marked) {
+      el.innerHTML = marked.parse(src);
+      el.querySelectorAll("table").forEach(function (t) {
+        var wrap = document.createElement("div"); wrap.className = "tbl";
+        t.parentNode.insertBefore(wrap, t); wrap.appendChild(t);
+      });
+      el.querySelectorAll("a[href^='http']").forEach(function (a) { a.target = "_blank"; a.rel = "noopener"; });
+    } else {
+      el.innerHTML = ""; var pre = document.createElement("div"); pre.className = "fallback"; pre.textContent = src; el.appendChild(pre);
+    }
+  }
+  function show(lang) {
+    ["en", L2].forEach(function (l) {
+      document.getElementById("doc-" + l).hidden = l !== lang;
+      document.getElementById(l === "en" ? "btn-en" : "btn-l2").setAttribute("aria-pressed", String(l === lang));
+    });
+    document.documentElement.lang = lang;
+    document.getElementById("eyebrow").textContent = eyebrow[lang];
+    try { localStorage.setItem("report-lang", lang); } catch (e) {}
+  }
+  render("en"); render(L2);
+  var start = "en";
+  try { start = localStorage.getItem("report-lang") || start; } catch (e) {}
+  if (location.hash === "#" + L2 || location.hash === "#en") start = location.hash.slice(1);
+  show(start === L2 ? L2 : "en");
+  document.querySelectorAll(".switch button").forEach(function (b) {
+    b.addEventListener("click", function () { show(b.dataset.lang); window.scrollTo(0, 0); });
+  });
+})();
+</script>
