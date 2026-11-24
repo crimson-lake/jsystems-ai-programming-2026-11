@@ -9,8 +9,11 @@ build/
 !.env.example
 secrets
 .DS_Store
-# Project skills in .agents/skills/ and skills-lock.json are committed: skills built
-# in class must reach the repository. .claude/skills/ holds the CLI's links to them.
+# Installed skills are not committed: only skills-lock.json is tracked, and
+# `npx skills install` restores .agents/skills/ and the .claude/skills/ links from it.
+# research-report is a project-authored skill and stays tracked in .agents/skills/.
+.agents/skills/*
+!.agents/skills/research-report/
 .claude/skills/
 __pycache__/
 *.pyc
