@@ -1,0 +1,194 @@
+{
+  "$source": {
+    "url": "https://novomatic-tech.com/pl/",
+    "extractedAt": "2026-11-25",
+    "method": "Computed styles via Playwright CLI (viewport 1280px), after accepting the cookie banner",
+    "framework": "MUI (Material UI) with Emotion CSS-in-JS"
+  },
+  "colors": {
+    "brand": {
+      "primary": "#001D4C",
+      "primaryDark": "#091E43",
+      "header": "#0D244C",
+      "accent": "#FF9700",
+      "info": "#308FC1",
+      "error": "#D32F2F",
+      "success": "#2E7D32"
+    },
+    "background": {
+      "default": "#FFFFFF",
+      "light": "#F4F7FC",
+      "lighter": "#E8EDF6",
+      "dark": "#001D4C",
+      "overlay": "rgba(0, 29, 76, 0.6)"
+    },
+    "text": {
+      "primary": "#001D4C",
+      "secondary": "#60708B",
+      "body": "#000000",
+      "accent": "#FF9700",
+      "onDark": "#FFFFFF"
+    },
+    "border": {
+      "default": "#BDBDBD"
+    },
+    "$notes": {
+      "error": "Not observed on the site; MUI default red, use for validation states.",
+      "success": "Not observed on the site; MUI default green.",
+      "overlay": "Not observed directly; derived from primary for modals and image overlays."
+    }
+  },
+  "typography": {
+    "fontFamily": {
+      "primary": "\"Montserrat\", Arial, sans-serif"
+    },
+    "fontSource": "Google Fonts: https://fonts.googleapis.com/css?family=Montserrat:300,400,500,700&subset=latin-ext&display=swap",
+    "fontWeights": {
+      "thin": 100,
+      "extralight": 200,
+      "light": 300,
+      "regular": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700
+    },
+    "fontSize": {
+      "xs": "10px",
+      "sm": "13px",
+      "base": "16px",
+      "md": "18px",
+      "lg": "26px",
+      "xl": "32px",
+      "2xl": "34px",
+      "3xl": "48px",
+      "display": "120px"
+    },
+    "lineHeight": {
+      "tight": "1.167",
+      "heading": "1.235",
+      "base": "1.5",
+      "relaxed": "1.75"
+    },
+    "styles": {
+      "display": { "fontSize": "120px", "fontWeight": 600, "color": "#FF9700", "usage": "Hero word (D•R•E•A•M)" },
+      "heroSubtitle": { "fontSize": "48px", "fontWeight": 100, "letterSpacing": "1px", "color": "#FFFFFF" },
+      "h3": { "fontSize": "48px", "fontWeight": 600, "lineHeight": "56px", "color": "#001D4C" },
+      "h4Subtitle": { "fontSize": "34px", "fontWeight": 200, "lineHeight": "42px", "color": "#001D4C" },
+      "h4": { "fontSize": "32px", "fontWeight": 600, "lineHeight": "44px", "color": "#001D4C" },
+      "tab": { "fontSize": "26px", "fontWeight": 300, "activeFontWeight": 600 },
+      "cardTitle": { "fontSize": "18px", "fontWeight": 500, "color": "#001D4C" },
+      "body": { "fontSize": "16px", "fontWeight": 400, "lineHeight": "24px", "color": "#60708B" },
+      "caption": { "fontSize": "10px", "fontWeight": 400, "color": "#60708B" }
+    }
+  },
+  "spacing": {
+    "unit": "8px",
+    "1": "4px",
+    "2": "8px",
+    "3": "12px",
+    "4": "16px",
+    "5": "20px",
+    "6": "24px",
+    "8": "32px",
+    "10": "40px",
+    "12": "48px",
+    "16": "64px",
+    "20": "80px"
+  },
+  "layout": {
+    "contentWidth": "~1140px (three 368px cards with gaps at 1280px viewport)",
+    "sectionPaddingY": "80px"
+  },
+  "borderRadius": {
+    "none": "0px",
+    "xs": "3px",
+    "sm": "4px",
+    "md": "8px",
+    "lg": "10px",
+    "xl": "20px",
+    "circle": "100%"
+  },
+  "shadows": {
+    "card": "0px 8px 10px 0px rgba(0, 0, 0, 0.1)"
+  },
+  "components": {
+    "button": {
+      "primary": {
+        "backgroundColor": "#FF9700",
+        "color": "#FFFFFF",
+        "padding": "10px 40px",
+        "borderRadius": "8px",
+        "fontSize": "16px",
+        "fontWeight": 400,
+        "height": "48px",
+        "textTransform": "none"
+      },
+      "secondary": {
+        "backgroundColor": "#001D4C",
+        "color": "#FFFFFF",
+        "padding": "10px 40px",
+        "borderRadius": "8px",
+        "fontSize": "15px",
+        "fontWeight": 400,
+        "height": "36px",
+        "textTransform": "none"
+      },
+      "icon": {
+        "backgroundColor": "#001D4C",
+        "color": "#FFFFFF",
+        "padding": "8px",
+        "borderRadius": "8px",
+        "size": "48px"
+      },
+      "text": {
+        "backgroundColor": "transparent",
+        "color": "#FF9700",
+        "fontSize": "16px",
+        "fontWeight": 400
+      }
+    },
+    "header": {
+      "backgroundColor": "#0D244C",
+      "color": "#FFFFFF",
+      "logoSize": "178x45px",
+      "position": "top, full width"
+    },
+    "nav": {
+      "color": "#FFFFFF",
+      "activeColor": "#FF9700",
+      "fontSize": "15px",
+      "fontWeight": 600,
+      "padding": "6px 8px",
+      "borderRadius": "8px",
+      "textTransform": "none"
+    },
+    "card": {
+      "backgroundColor": "#FFFFFF",
+      "borderRadius": "8px",
+      "boxShadow": "0px 8px 10px 0px rgba(0, 0, 0, 0.1)",
+      "width": "368px",
+      "footerBackground": "#F4F7FC",
+      "footerPadding": "16px"
+    },
+    "chip": {
+      "variant": "outlined",
+      "border": "1px solid #BDBDBD",
+      "borderRadius": "3px",
+      "color": "#001D4C",
+      "fontSize": "13px",
+      "height": "32px"
+    },
+    "tabs": {
+      "color": "#001D4C",
+      "fontSize": "26px",
+      "fontWeight": 300,
+      "activeFontWeight": 600,
+      "indicatorColor": "#001D4C"
+    },
+    "footer": {
+      "backgroundColor": "#001D4C",
+      "color": "#FFFFFF",
+      "activeLinkColor": "#FF9700"
+    }
+  }
+}
