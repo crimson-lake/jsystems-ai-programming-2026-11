@@ -163,7 +163,8 @@ To make AC-22, AC-26 and AC-35 order-proof, the assistant message is rendered fr
 ### 3.6 Streaming, cancellation and errors
 
 - **Forwarded events:** the stream is consumed with the SDK `StreamResponse<ResponseStreamEvent>`. Only `outputTextDelta().delta()` is forwarded. Reasoning events are ignored and never sent to the browser (AC-42).
-- **End of stream:** `response.completed` ends the message and carries usage, which is logged with case ID and token counts and no content. `response.failed` and `response.incomplete` arrive with HTTP 200 and are treated as errors.
+- **End of stream:** `response.completed` ends the message and carries usage. `response.failed` and `response.incomplete` arrive with HTTP 200 and are treated as errors.
+- **Call evidence log:** **every** external AI call writes exactly one INFO line when it finishes, `ai.call step=<TRIAGE|VISION|DECISION|DECISION_REASK|STREAM> caseId=… model=… status=<OK|ERROR|TIMEOUT|CANCELLED> latencyMs=… inTokens=… outTokens=…`, with no content. E2E and manual QA use these lines as proof that each step really ran against OpenRouter (ADR-000 §10).
 - **SSE comments:** comments such as `: OPENROUTER PROCESSING` are handled by the SDK and must not be forwarded.
 - **Cancellation:**
   - When the browser disconnects (SSE heartbeat write fails, ADR-002), the gateway closes the SDK stream (`StreamResponse.close()`).
@@ -282,9 +283,12 @@ To make AC-22, AC-26 and AC-35 order-proof, the assistant message is rendered fr
   - (g) if obtainable, any `response.failed` or `response.incomplete` stream event (e.g. with a very low `max_output_tokens`).
 - The schema classes used by (a) and (b) are **provisional test-scope records** in the capture test. The production records are created later from the same shape (plan T14).
 - Save each capture (status, headers without the key, body or SSE transcript, date, model) under `app/backend/src/test/resources/openrouter-captures/`. WireMock stubs are derived only from these captures (AGENTS.md).
-- **Documented synthetic exceptions:**
-  - HTTP 502, a stalled connection (timeout) and, if (g) could not be captured, `response.failed` cannot be triggered safely.
-  - Their stubs reuse the captured envelope ((e), (f)) with the documented status or event type from the OpenRouter errors and streaming pages, and record that origin in the stub file.
+- **No stub is built from documentation** (product owner rule, 2026-11-26). Every stub body, status and header comes from a recorded real call, byte for byte.
+- **Allowed without a response shape:** WireMock **transport faults**, which invent nothing:
+  - a fixed delay added to a captured response (timeout tests);
+  - `CONNECTION_RESET_BY_PEER` / `EMPTY_RESPONSE` (network-failure tests).
+- **Real error responses** to capture: (e) 401 invalid key; (f) invalid model; (g) `response.failed` / `response.incomplete`, if obtainable; and any other real error OpenRouter returns during the spike.
+- **Shapes that cannot be captured** (for example a real 5xx, or (g) if it could not be provoked) are **not stubbed**. They are listed as "uncovered: missing capture" in `openrouter-captures/README.md` and reported in the T12 summary and the final PR (AGENTS.md: "report the missing prerequisite instead of inventing a response shape"). Their error-mapping code paths stay covered only by the generic HTTP-status mapping tested with the real 401/400 captures.
 - If (a), (b) or (d) cannot be made to work, switch to `ChatCompletionsGateway` and update this ADR.
 
 **Review trigger:** S-1 fails; OpenRouter marks Responses as beta or deprecated; or model fallback routing (`models: [...]`) becomes a requirement.
@@ -443,9 +447,9 @@ sequenceDiagram
 | Guardrail G5 | Unit | COMPLAINT, LOW confidence, model REJECTED | ESCALATED with `C8` | MEDIUM confidence → REJECTED kept |
 | Rule-ID validation G6 | Unit | Model returns `C2.3` on a RETURN case | Re-ask once (if ≥ 15 s left), then drop → ESCALATED with `R6` if empty | Valid + invalid mix; < 15 s left → no re-ask |
 | Change flag | Unit | Current REJECTED, new ACCEPTED | `changed=true`, `previousLabel=REJECTED` | Same label → `changed=false` |
-| Stream mapping | Unit | Fake event sequence incl. reasoning deltas and `response.failed` | Only text deltas forwarded; FAILED → `LlmUnavailable` | Zero deltas then completed |
-| Structured call via WireMock | Integration | Stub = capture S-1(b) | `DecisionResult` parsed | Stub with an invalid enum → `AI_UNAVAILABLE` (no automatic retry) |
-| Streaming via WireMock | Integration | Stub = capture S-1(c) as an SSE body | Deltas in order and usage logged | Stub with a 502; stub stalls past the timeout |
+| Stream mapping | Unit | **Recorded SSE transcripts** from S-1 (c) (and (g) if captured), parsed into SDK events, including any reasoning events the real model emitted | Only text deltas forwarded; a captured `response.failed`/`incomplete` → `LlmUnavailable` | If (g) was not captured, the failed-event case is listed as uncovered (§6 S-1) |
+| Structured call via WireMock | Integration | Stub = capture S-1(b) | `DecisionResult` parsed | Real captured 400 (invalid model, (f)) → `AI_UNAVAILABLE`, no automatic retry |
+| Streaming via WireMock | Integration | Stub = capture S-1(c) as an SSE body | Deltas in order and usage logged | Real captured 401 (e) → `AI_UNAVAILABLE`; the captured success response with a fixed delay beyond the budget → `TIMEOUT`; `CONNECTION_RESET_BY_PEER` fault → `AI_UNAVAILABLE` |
 | AI evals | Eval (real model) | `app/evals/cases/*.json`: about 15 cases, combining the 5 unedited example photos with form data. The **expectations come only from the form and the policy** (PRD §12, 2026-11-26):<br>• return 31 / 45 days → REJECTED `R2.3`, **or** ESCALATED `R7.1` if the recorded analysis or triage triggered G1 (safety precedence; the photo content is never pre-assumed);<br>• complaint > 2 years → REJECTED `C2.3`, with the same safety allowance (`C7.1`);<br>• safety wording in the reason → ESCALATED `R7.1`/`C7.1`;<br>• prompt-injection reason → not ACCEPTED solely because of the injection;<br>• every cited ID ⊆ the applied policy;<br>• Polish reply to an English question (AC-45) | 100% on these assertions. For every photo, the model's `ImageAnalysis` and label are **recorded in the report without pass/fail**, because the README forbids pre-assuming what the model sees | Run 3× to detect flakiness |
 
 ### Technical acceptance criteria
@@ -455,4 +459,4 @@ sequenceDiagram
 - TAC-001-04: G1–G6, `RuleIdStreamFilter` and the ID-replacement logic have 100% branch coverage in unit tests, measured with JaCoCo, which is configured in the POM.
 - TAC-001-07: No streamed or replayed text delivered to the browser contains a bracketed rule ID outside `decision.ruleIds` (integration test with a stub whose body cites `[R9.9]`).
 - TAC-001-05: The SSE output never contains reasoning text, model names or instruction text (integration test with a stub that includes reasoning events).
-- TAC-001-06: All WireMock stubs reference a capture file that records its date, endpoint, model and request without secrets, or are listed as a documented synthetic exception (D-L1, S-1).
+- TAC-001-06: Every WireMock stub body, status and header is copied from a capture file that records its date, endpoint, model and request without secrets. The only additions allowed are transport faults (delay, connection reset). No stub is derived from documentation, and a test checks that every stub file references an existing capture.

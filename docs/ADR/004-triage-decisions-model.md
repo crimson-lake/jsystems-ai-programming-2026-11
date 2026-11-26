@@ -204,6 +204,7 @@ The message has the same segments as LLM messages (ADR-001 §3.5): safety block,
   - (b) A JPEG asset and the three question types used here (`noul`, `choice`, `score`) are accepted.
   - (c) The `answers[*].confidence` and `probabilities` shapes are as documented.
   - (d) Latency and `usage.cost` per case are recorded.
+  - (e) Real error responses are recorded for the fallback tests: an invalid key (401) and an invalid model ID. Stubs for other errors are not invented (ADR-001 S-1 rule).
 - Capture the responses verbatim to `app/backend/src/test/resources/openrouter-captures/decisions-*.json`.
 - If (a) or (b) fails, set `TRIAGE_MODE=off`, record the finding in this ADR and ask the product owner whether to use another decisions-modality model (e.g. one of the 39 listed models that declare image input).
 **Rejected alternatives:**
@@ -351,7 +352,7 @@ sequenceDiagram
 | Safety asymmetry | Unit | `safety_hazard` P=0.31, confidence 0.40 | T1 escalation | P=0.29 → no T1 |
 | Defect in a return reason | Unit | RETURN, all answers HIGH, `reason_reports_defect=true` | Not T5 → LLM path (T7) | Empty reason → T5 allowed |
 | Mode behavior | Unit | Same input in `off`, `assist`, `fast-path` | `off`: no triage call; `assist`: LLM path + agreement log line; `fast-path`: no LLM call | — |
-| Fallback | Integration (WireMock) | Decisions endpoint returns 502 / 524 / times out after 8 s | LLM path used; customer sees a normal decision; no error event | Deadline still met |
+| Fallback | Integration (WireMock) | The Decisions endpoint returns a **recorded real error** from S-2 (401 invalid key, invalid model), a captured success **delayed** past 8 s, or a connection reset | LLM path used; customer sees a normal decision; no error event | Deadline still met. 502/524 are not stubbed unless really recorded |
 | Safety precedence | Unit | RETURN 45 days old, triage `safety_hazard` P=0.6 | T1 → ESCALATED `R7.1`, not REJECTED | Same in `assist` mode via ADR-001 G1 |
 | Derived analysis | Unit | Fast-path result | `analyses` gets a `source=TRIAGE` `ImageAnalysis` with the mapped fields | — |
 | Templates | Unit | Every template × every rule | All AC-22 sections present; rule IDs ⊆ policy IDs; for light use, the reduction sentence is present (R3.3); no unreplaced placeholders | — |

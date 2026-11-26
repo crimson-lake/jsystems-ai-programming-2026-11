@@ -455,8 +455,9 @@ sequenceDiagram
 | Date parsing | Unit | Typed `24.11.2026`, `2026-11-24`, `31.02.2026` | The first two are parsed; the third is invalid | Today, tomorrow, 10 years ago |
 | Photo reducer | Unit (jsdom with canvas mocks) + browser test | **Real example photos:** `laptop-1.png` (3024×3135, JPEG content with a `.png` name), `laptop-2.webp`, `phone-2.jpeg` (small). **Byte-level fixtures (PRD §12 exception):** GIF/HEIC headers, an in-memory blob > 10 MB | Large photos → ≤1600 px JPEG; small photo not upscaled; WebP accepted; GIF/HEIC and > 10 MB rejected with the §3.7 texts | EXIF orientation is **not covered** until a real rotated photo is added to `assets/example-images/` |
 | Chat error after `decision` | Unit (store) | `decision{changed:true}` → `delta` → `error` in a chat turn | Badge back to the previous label, partial message removed, inline error shown | — |
-| SSE parser | Unit | Byte chunks splitting events mid-line, comments `: ping`, CRLF | Correct typed events in order; comments ignored | Stream ends without `done` → error |
-| Store transitions | Unit | Event sequences from the ADR-002 contract | Signals match the expected state (badge, messages, streaming) | `error` after deltas → failed state, partial text discarded |
+| SSE parser | Unit | **Recorded backend SSE transcripts** (`src/testing/captures/*.sse`, recorded from the running app with real OpenRouter in plan T26/T27), re-chunked at varying byte boundaries incl. mid-line and inside multi-byte Polish characters | Correct typed events in order; `: ping` comments ignored | A recording truncated before `done` → error |
+| Store transitions | Unit | Recorded transcripts. Sequences that cannot be provoked for real (e.g. `error` after `delta`) are **spliced from recorded events**: real `decision`/`delta` events from a success recording plus the real `error` event from the invalid-key recording, in an order ADR-002 §3.5 allows. No event payload is hand-written | Signals match the expected state (badge, messages, streaming) | `error` after deltas → failed state, partial text discarded |
+| HTTP error mapping input | Unit | **Recorded real backend error responses** (400, 404, 409, 413, 422), captured in plan T27 by sending real invalid requests to the running app | Each maps to the §3.7 behavior | — |
 | Markdown sanitization | Unit | `<script>`, `<img onerror>`, `[link](javascript:)` in the body | Removed; headings, lists and bold kept | Unclosed `**` while streaming |
 | Composer keys | Component | Enter, Shift+Enter, empty text, 2001 chars | Send, newline, blocked, blocked | Photo without text allowed (AC-32) |
 | Photo limit | Component | `additionalPhotoCount=3` | Attach disabled + hint (AC-33) | — |
@@ -471,6 +472,9 @@ sequenceDiagram
 | E2E outside window | E2E | RETURN, purchase 45 days ago | Badge ∈ {"Odrzucone", "Przekazane do specjalisty"}. If "Odrzucone", the text mentions 45 and 30; if escalated, the safety block is shown (G1 precedence; the photo content is never pre-assumed) | — |
 | E2E error UI | E2E | Backend started with an invalid key | Form banner with "Spróbuj ponownie"; data and photo preserved (AC-40) | — |
 | E2E keyboard | E2E | Complete the flow with the keyboard only | All controls reachable, with visible focus and labels (AC-47) | — |
+| E2E safety wording | E2E | RETURN, recent date, reason "Bateria spuchła i czuć swąd" | Badge "Przekazane do specjalisty"; the safety block is first (AC-26). Form-driven, via G1 | — |
+| E2E chat photo + new case | E2E | In chat, attach `laptop-2.webp` with a question, then "Nowa sprawa" → confirm | Reply streamed; network log shows `POST /messages` with a photo part and then `DELETE /api/cases/{id}` → 204; the form is empty | — |
+| E2E coverage proof | E2E (global teardown) | Browser network logs + the backend log file of the JAR run | Every endpoint was called at least once, and the `ai.call` lines show `TRIAGE`, `VISION` (form and chat), `DECISION` and `STREAM` with `status=OK` (ADR-000 §10). Missing evidence fails the run | `DECISION_REASK` reported as observed / not observed |
 | Visual QA | Manual (Playwright CLI) | Screenshots of the form and chat at 390 px and 1280 px | Match the brand reference `assets/homepage*.png` + tokens | — |
 
 ### Technical acceptance criteria

@@ -515,8 +515,20 @@ sequenceDiagram
 TDD, following `AGENTS.md`:
 - Every acceptance criterion gets a failing test first.
 - The LLM boundary (`LlmGateway`) is the only seam that unit tests mock.
-- Integration tests stub only OpenRouter HTTP (WireMock): both the Responses API and the Decisions API. Stubs are derived from **verbatim captured** OpenRouter responses for the example photos (AGENTS.md "Before creating … a mock"). Failure shapes that cannot be captured safely (timeouts, 502) are documented synthetic exceptions in ADR-001 §8.
-- E2E mocks nothing.
+- **Integration tests** stub only OpenRouter HTTP (WireMock): both the Responses API and the Decisions API.
+  - Every stub is copied **verbatim from a recorded real call** (status, headers, body or SSE transcript). **Nothing is derived from documentation** (product owner rule, 2026-11-26; AGENTS.md "Before creating … a mock").
+  - The only additions allowed are transport faults: a delay on a captured response, or a connection reset.
+  - A response shape that could not be recorded is not stubbed. It is reported as a missing capture (ADR-001 S-1).
+- **Unit tests** that parse external or backend protocols (OpenAI SDK events, Decisions answers, the backend SSE stream in the frontend) take their input from **recorded transcripts**:
+  - OpenRouter captures (S-1, S-2);
+  - real backend SSE recordings made against the running app in plan T26/T27 and stored in `app/frontend/src/testing/captures/`.
+
+  Re-chunking a recorded byte stream at different boundaries is allowed, because it changes transport framing, not content.
+- **E2E and manual QA mock nothing.**
+  - They use the packaged app (or the dev stack in phase gates), the real OpenRouter Responses and Decisions APIs, and the real example photos.
+  - The suite must exercise every endpoint (`POST /api/cases`, `POST /api/cases/{id}/messages` with text and with a photo, `DELETE /api/cases/{id}`, `GET /actuator/health`) and every AI call step (`TRIAGE`, `VISION` for form and chat photos, `DECISION`, `STREAM`).
+  - **Proof:** the browser network log for the endpoints, and the backend `ai.call` log lines for the AI steps (ADR-001 §3.6).
+  - `DECISION_REASK` runs only when the model returns invalid IDs, so it cannot be forced. It is reported as "observed / not observed".
 - AI evals check decision quality against the policies, because unit tests cannot prove that the model follows the policy.
   - Per PRD §12 (2026-11-26), evals assert only outcomes that follow from **form data and policy**: time windows, safety wording, prompt injection, cited rule IDs.
   - For the example photos, the model's assessment is **recorded, never pre-assumed** (`assets/example-images/README.md`).
@@ -551,7 +563,7 @@ TDD, following `AGENTS.md`:
 | Invented rule ID | The model returns `R9.9` | One corrective retry. If it still fails, the invalid IDs are dropped, or the case is ESCALATED when none remain (AC-23) | — |
 | Revision | A new photo shows the damage clearly | `decision.changed=true`, `previousLabel` is set, and the text starts with "Zmiana decyzji" (AC-35) | Unchanged → no block (AC-36) |
 | Photo limit | 4th extra photo | 422, and the UI attach control is disabled with the hint (AC-33) | A retry after a failure does not count |
-| AI failure | WireMock returns 502, or `response.failed` mid-stream | Stream `error` and nothing committed; the form keeps its data (AC-40/41) | Timeout after 60 s |
+| AI failure | IT: the real captured 401/400 error, a delayed captured response, or a connection reset. E2E: the app instance started with an invalid key (a real 401 from OpenRouter) | Stream `error` and nothing committed; the form keeps its data (AC-40/41) | Timeout after 60 s |
 | Expired case | Message to an evicted case | 404 → the UI shows an error and offers "Nowa sprawa" | — |
 | Lost `done` | The retry re-sends a `clientMessageId` that was already committed | The committed turn is replayed (`decision`, one `delta` with the full text, `done`); no duplicate | — |
 | Error after `decision` on the first submit | Stream fails mid-delta | The UI returns to the filled form with the photo and the banner (AC-40) | — |
