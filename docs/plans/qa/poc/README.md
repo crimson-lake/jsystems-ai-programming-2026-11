@@ -69,3 +69,12 @@ Screenshots from per-task QA and phase gates (plan §4.5). Each entry gives the 
 | `T31/03-filled-complaint-1280.png` | Reklamacja, Laptop, model, typed date `10.10.2026`, reason, `laptop-1.png` | Reason required marker shown for Reklamacja, complaint photo hint, thumbnail + file name + "Usuń", counter 41/2000 |
 | `T31/04-filled-complaint-390.png` | Same at 390 px | Single column, `scrollWidth` 390 = `clientWidth` (no horizontal scroll) |
 | — | Console | 0 errors, 0 warnings |
+
+## T26 — First-decision pipeline, real-API check (2026-11-26)
+
+- **App commit:** the T26 commit (backend `spring-boot:run` with the real `.env`; triage not built yet).
+- **Method:** `playwright-cli` `run-code` with `page.request.post` multipart: RETURN, SMARTPHONE, purchase 10 days ago, `phone-1.jpg` (unedited bytes). No screenshots (API-only task).
+- **Port 8080, real key:** 200 `text/event-stream`, 22.6 s. Events `case, progress×3, : ping, decision, progress WRITING_REPLY, delta×49, done`. The model returned `REJECTED` with `[R1.1, R3.4]` and `suggestOtherCaseType=COMPLAINT` (recorded, not pre-assumed).
+- **`ai.call` lines** (`test-results/app-t26.log`, model `openai/gpt-6-luna`): `VISION OK 12242 ms 2653/357`, `DECISION OK 2817 ms 2257/120`, `STREAM OK 5222 ms 1846/366`. No customer text in the log.
+- **Port 8081, `OPENROUTER_API_KEY=invalid`:** `case, progress×2, error{AI_UNAVAILABLE}`; log has `AI_CONFIG … 401` at ERROR and `ai.call step=VISION status=ERROR`; nothing stored.
+- **Recordings for frontend tests:** `app/frontend/src/testing/captures/case-success.sse` and `case-error.sse` (byte-exact), described in that folder's README.

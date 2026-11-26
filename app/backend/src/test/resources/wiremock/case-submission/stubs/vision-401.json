@@ -1,0 +1,36 @@
+{
+  "name": "vision-401",
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/responses",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.text.format.schema.properties.safetyHazard"
+      }
+    ]
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "access-control-allow-origin": "*",
+      "access-control-expose-headers": "WWW-Authenticate,PAYMENT-REQUIRED,Payment-Receipt,PAYMENT-RESPONSE,Location,X-Generation-Id,x-openrouter-error-origin,x-openrouter-error-tool,X-Provider-Name,request-id,x-openrouter-subscription-passthrough,anthropic-ratelimit-unified-status,Retry-After,cf-ray",
+      "alt-svc": "h3=\":443\"; ma=86400",
+      "cf-ray": "a6081ecfb8e9bf44-WAW",
+      "content-type": "application/json",
+      "date": "Thu, 26 Nov 2026 10:13:25 GMT",
+      "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+      "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+      "server": "cloudflare",
+      "server-timing": "cfEdge;dur=2,cfOrigin;dur=0,cfWorker;dur=150",
+      "x-content-type-options": "nosniff",
+      "x-openrouter-error-origin": "client"
+    },
+    "bodyFileName": "responses-e-invalid-key.json"
+  },
+  "metadata": {
+    "source": "responses-e-invalid-key",
+    "sourceFile": "openrouter-captures/responses-e-invalid-key.meta.json",
+    "note": "verbatim from capture; discriminator selects the call kind",
+    "addition": "none"
+  }
+}

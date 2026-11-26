@@ -1,0 +1,201 @@
+package com.hsdc.copilot.cases;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import com.hsdc.copilot.analysis.ImageAnalysis;
+import com.hsdc.copilot.analysis.ImageAnalysisService;
+import com.hsdc.copilot.decision.Decision;
+import com.hsdc.copilot.decision.DecisionService;
+import com.hsdc.copilot.decision.DecisionService.MessageKind;
+import com.hsdc.copilot.llm.AiCallContext;
+import com.hsdc.copilot.llm.CancelToken;
+import com.hsdc.copilot.llm.Deadline;
+import com.hsdc.copilot.llm.LlmCancelledException;
+import com.hsdc.copilot.llm.LlmTimeoutException;
+import com.hsdc.copilot.llm.LlmUnavailableException;
+import com.hsdc.copilot.web.SseEventWriter;
+import com.hsdc.copilot.web.sse.CaseCreatedEvent;
+import com.hsdc.copilot.web.sse.DecisionEvent;
+import com.hsdc.copilot.web.sse.DeltaEvent;
+import com.hsdc.copilot.web.sse.DoneEvent;
+import com.hsdc.copilot.web.sse.ProgressEvent;
+import com.hsdc.copilot.web.sse.ProgressEvent.Step;
+import com.hsdc.copilot.web.sse.SseEventType;
+import com.hsdc.copilot.web.sse.StreamErrorEvent;
+
+/**
+ * Turn orchestration (ADR-002 section 3.4). The first submission works on a new {@link CaseSession} that is saved
+ * into the {@link CaseStore} only after the whole turn succeeded; any error leaves no case behind (AC-40).
+ * Logs carry the case ID and step, never customer text or image data.
+ */
+@Service
+public class CaseService {
+
+    private static final Logger log = LoggerFactory.getLogger(CaseService.class);
+
+    private final CaseStore store;
+    private final ImageAnalysisService analysis;
+    private final DecisionService decisions;
+    private final Clock clock;
+    private final Duration decisionBudget;
+    private final Map<UUID, RunningTurn> running = new ConcurrentHashMap<>();
+
+    private record RunningTurn(CaseSession session, CancelToken token) {
+    }
+
+    public CaseService(CaseStore store, ImageAnalysisService analysis, DecisionService decisions, Clock clock,
+            @Value("${app.timeouts.decision-budget:55s}") Duration decisionBudget) {
+        this.store = store;
+        this.analysis = analysis;
+        this.decisions = decisions;
+        this.clock = clock;
+        this.decisionBudget = decisionBudget;
+    }
+
+    /** Runs the first-decision turn of a new case; called on the turn executor, emits all events itself. */
+    public void create(CaseForm form, byte[] photo, SseEventWriter writer) {
+        UUID caseId = UUID.randomUUID();
+        CaseSession working = new CaseSession(caseId, form, clock.instant());
+        CancelToken token = writer.cancelToken();
+        AtomicBoolean firstDeltaTimedOut = new AtomicBoolean();
+        running.put(caseId, new RunningTurn(working, token));
+        MDC.put(AiCallContext.CASE_ID_KEY, caseId.toString());
+        working.getLock().lock();
+        try {
+            Deadline deadline = Deadline.in(decisionBudget);
+            writer.startHeartbeat();
+            send(writer, SseEventType.CASE, new CaseCreatedEvent(caseId));
+            progress(writer, Step.UPLOAD_RECEIVED);
+            progress(writer, Step.ANALYZING_PHOTO);
+            ImageAnalysis imageAnalysis = analysis.analyze(working, photo, deadline);
+            working.getAnalyses().add(imageAnalysis);
+            progress(writer, Step.PREPARING_DECISION);
+            Decision decision = decisions.decide(working, new TurnInput(null, null, null), deadline);
+            deadline.check();
+            send(writer, SseEventType.DECISION, decisionEvent(decision));
+            progress(writer, Step.WRITING_REPLY);
+
+            AtomicBoolean firstDelta = new AtomicBoolean();
+            watchFirstDelta(deadline, firstDelta, firstDeltaTimedOut, token);
+            String text = decisions.streamMessage(working, decision, MessageKind.FIRST, delta -> {
+                firstDelta.set(true);
+                send(writer, SseEventType.DELTA, new DeltaEvent(delta));
+            }, token);
+
+            UUID messageId = UUID.randomUUID();
+            working.getMessages().add(new ChatMessage(messageId, ChatMessage.Role.ASSISTANT, text, null, false, null,
+                    decision, decision.changed(), decision.previousLabel(), clock.instant()));
+            working.setCurrentDecision(decision);
+            if (!commit(working, token)) {
+                writer.complete();
+                return;
+            }
+            writer.send(SseEventType.DONE, new DoneEvent(messageId));
+            writer.complete();
+            log.info("Case created label={} overriddenBy={}", decision.label(), decision.overriddenBy());
+        }
+        catch (LlmCancelledException e) {
+            if (firstDeltaTimedOut.get()) {
+                fail(writer, StreamErrorEvent.Code.TIMEOUT, "first delta not received before the deadline");
+            }
+            else {
+                log.info("Turn cancelled (client gone or case deleted); nothing stored");
+                writer.complete();
+            }
+        }
+        catch (LlmTimeoutException e) {
+            fail(writer, StreamErrorEvent.Code.TIMEOUT, "timeout");
+        }
+        catch (LlmUnavailableException e) {
+            fail(writer, StreamErrorEvent.Code.AI_UNAVAILABLE, "AI unavailable");
+        }
+        catch (ClientGoneException e) {
+            log.info("Client gone during the turn; nothing stored");
+            token.cancel();
+            writer.complete();
+        }
+        catch (RuntimeException e) {
+            log.error("Turn failed unexpectedly: {}", e.getClass().getName());
+            log.debug("Unexpected turn failure", e);
+            fail(writer, StreamErrorEvent.Code.AI_UNAVAILABLE, "unexpected");
+        }
+        finally {
+            working.getLock().unlock();
+            running.remove(caseId);
+            MDC.remove(AiCallContext.CASE_ID_KEY);
+        }
+    }
+
+    /** DELETE /api/cases/{id}: idempotent; marks the case deleted, removes it and cancels a running turn. */
+    public void delete(UUID caseId) {
+        RunningTurn turn = running.get(caseId);
+        if (turn != null) {
+            turn.session().setDeleted(true);
+            turn.token().cancel();
+        }
+        store.find(caseId).ifPresent(s -> s.setDeleted(true));
+        store.remove(caseId);
+    }
+
+    /** Re-puts the session unless the case was deleted or the client left (ADR-002 section 5). */
+    private boolean commit(CaseSession session, CancelToken token) {
+        if (session.isDeleted() || token.isCancelled()) {
+            log.info("Turn finished after DELETE or disconnect; not stored");
+            return false;
+        }
+        store.save(session);
+        return true;
+    }
+
+    private void fail(SseEventWriter writer, StreamErrorEvent.Code code, String why) {
+        log.warn("Turn failed ({}), sending error {}; nothing stored", why, code);
+        writer.error(code);
+    }
+
+    /** Cancels the stream when no delta arrived before the 55 s deadline (ADR-001 section 3.6). */
+    private static void watchFirstDelta(Deadline deadline, AtomicBoolean firstDelta, AtomicBoolean timedOut,
+            CancelToken token) {
+        long ms = Math.max(0, deadline.remaining().toMillis());
+        CompletableFuture.runAsync(() -> {
+            if (!firstDelta.get() && !token.isCancelled()) {
+                timedOut.set(true);
+                token.cancel();
+            }
+        }, CompletableFuture.delayedExecutor(ms, TimeUnit.MILLISECONDS));
+    }
+
+    private static void progress(SseEventWriter writer, Step step) {
+        send(writer, SseEventType.PROGRESS, new ProgressEvent(step));
+    }
+
+    private static void send(SseEventWriter writer, String name, Object payload) {
+        if (!writer.send(name, payload)) {
+            throw new ClientGoneException();
+        }
+    }
+
+    private static DecisionEvent decisionEvent(Decision d) {
+        return new DecisionEvent(d.label(), d.previousLabel(), d.changed(), d.changeReasonPl(), d.safety(),
+                d.suggestOtherCaseType(), d.ruleIds());
+    }
+
+    /** The SSE client is gone (a write failed); the turn stops without an error event. */
+    private static final class ClientGoneException extends RuntimeException {
+        ClientGoneException() {
+            super("SSE client gone", null, false, false);
+        }
+    }
+}

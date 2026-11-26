@@ -1,0 +1,172 @@
+event:case
+data: {"caseId":"f0e4cbb1-47a4-4675-9423-cff3f8f197c9"}
+
+event:progress
+data: {"step":"UPLOAD_RECEIVED"}
+
+event:progress
+data: {"step":"ANALYZING_PHOTO"}
+
+: ping
+
+event:progress
+data: {"step":"PREPARING_DECISION"}
+
+event:decision
+data: {"label":"REJECTED","previousLabel":null,"changed":false,"changeReasonPl":"","safety":false,"suggestOtherCaseType":"COMPLAINT","ruleIds":["R1.1","R3.4"]}
+
+event:progress
+data: {"step":"WRITING_REPLY"}
+
+event:delta
+data: {"text":"###"}
+
+event:delta
+data: {"text":" Co"}
+
+event:delta
+data: {"text":" wid"}
+
+event:delta
+data: {"text":"zim"}
+
+event:delta
+data: {"text":"y"}
+
+event:delta
+data: {"text":" na"}
+
+event:delta
+data: {"text":" zdję"}
+
+event:delta
+data: {"text":"ciu"}
+
+event:delta
+data: {"text":"\n"}
+
+event:delta
+data: {"text":"Na"}
+
+event:delta
+data: {"text":" zdję"}
+
+event:delta
+data: {"text":"ciu"}
+
+event:delta
+data: {"text":" w"}
+
+event:delta
+data: {"text":"ida"}
+
+event:delta
+data: {"text":"ć"}
+
+event:delta
+data: {"text":" smart"}
+
+event:delta
+data: {"text":"fon z"}
+
+event:delta
+data: {"text":" mocno"}
+
+event:delta
+data: {"text":" popę"}
+
+event:delta
+data: {"text":"kanym"}
+
+event:delta
+data: {"text":" ekranem"}
+
+event:delta
+data: {"text":" oraz ci"}
+
+event:delta
+data: {"text":"emnymi"}
+
+event:delta
+data: {"text":" i zielonym"}
+
+event:delta
+data: {"text":"i pasami"}
+
+event:delta
+data: {"text":" na wyświet"}
+
+event:delta
+data: {"text":"laczu.\n\n"}
+
+event:delta
+data: {"text":"### Uzas"}
+
+event:delta
+data: {"text":"adnienie\n"}
+
+event:delta
+data: {"text":"Zwrot dotyc"}
+
+event:delta
+data: {"text":"zy towaru"}
+
+event:delta
+data: {"text":", który działa praw"}
+
+event:delta
+data: {"text":"idłowo i którego"}
+
+event:delta
+data: {"text":" już nie chcesz."}
+
+event:delta
+data: {"text":" Widoczne uszk"}
+
+event:delta
+data: {"text":"odzenie ekranu ozn"}
+
+event:delta
+data: {"text":"acza, że"}
+
+event:delta
+data: {"text":" sprawa nie kwalifiku"}
+
+event:delta
+data: {"text":"je się do zwrotu "}
+
+event:delta
+data: {"text":"[R1.1] "}
+
+event:delta
+data: {"text":"[R3.4]. Wygląda na"}
+
+: ping
+
+event:delta
+data: {"text":" to, że bardziej pasuje tu reklam"}
+
+event:delta
+data: {"text":"acja. Możesz rozpocząć ją przez"}
+
+event:delta
+data: {"text":" **Nowa sprawa**"}
+
+event:delta
+data: {"text":".\n\n### Kolejne kroki\n1. W"}
+
+event:delta
+data: {"text":"ybierz **Nowa"}
+
+event:delta
+data: {"text":" sprawa** i zgłoś reklamację,"}
+
+event:delta
+data: {"text":" opisując uszk"}
+
+event:delta
+data: {"text":"odzenie ekranu."}
+
+event:done
+data: {"messageId":"c45dae94-e3cb-4bca-b4f8-8c0dca410950"}
+
