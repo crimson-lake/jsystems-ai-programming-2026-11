@@ -1,6 +1,8 @@
 package com.hsdc.copilot.decision;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -10,14 +12,18 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Enforces AC-23 on the streamed text (ADR-001 section 3.1): bracketed rule IDs that are not in
- * {@code decision.ruleIds} are removed. Only the exact shape {@code [R2.3]} / {@code [C8]} is touched, so model names
- * such as "LG C3" or "Canon R5" stay. A partial token at the end of a delta is held back until it completes or proves
+ * {@code decision.ruleIds} are removed. Only the exact shape {@code [R2.3]} / {@code [C8]}, or a bracketed list of
+ * such IDs separated by commas or semicolons ({@code [R2.2, R9.9]}), is touched, so model names such as "LG C3" or
+ * "Canon R5" and other brackets stay. In a list the disallowed IDs are dropped (the whole bracket when none is left). A partial token at the end of a delta is held back until it completes or proves
  * not to be an ID. One instance per streamed message; not thread-safe.
  */
 public final class RuleIdStreamFilter {
 
 	private static final Logger LOG = LoggerFactory.getLogger(RuleIdStreamFilter.class);
-	private static final Pattern TOKEN = Pattern.compile("\\[([RC]\\d{1,2}(?:\\.\\d{1,2})?)]");
+	private static final String ID = "[RC]\\d{1,2}(?:\\.\\d{1,2})?";
+	private static final Pattern TOKEN = Pattern.compile("\\[(" + ID + "(?:\\s*[,;]\\s*" + ID + ")*)]");
+	private static final Pattern SEPARATOR = Pattern.compile("\\s*[,;]\\s*");
+	private static final Pattern FIRST_SEPARATOR = Pattern.compile("[,;]");
 	private static final Pattern UNBRACKETED = Pattern.compile("(?<!\\[)\\b[RC]\\d{1,2}(?:\\.\\d{1,2})?\\b(?!])");
 
 	private final UUID caseId;
@@ -96,14 +102,31 @@ public final class RuleIdStreamFilter {
 		}
 	}
 
-	private void resolve(String id) {
-		if (allowed.contains(id)) {
-			current.append(pending);
+	/** {@code content} is one ID or an ID list; the bracket stays verbatim when every ID is allowed. */
+	private void resolve(String content) {
+		String[] ids = SEPARATOR.split(content);
+		List<String> kept = new ArrayList<>();
+		for (String id : ids) {
+			if (allowed.contains(id)) {
+				kept.add(id);
+			}
+			else {
+				removed++;
+				LOG.warn("Removed rule ID [{}] not in decision.ruleIds from streamed text, caseId={}", id, caseId);
+			}
 		}
-		else {
-			removed++;
-			LOG.warn("Removed rule ID [{}] not in decision.ruleIds from streamed text, caseId={}", id, caseId);
-		}
+		String all = pending.toString();
 		pending = null;
+		if (kept.isEmpty()) {
+			return;
+		}
+		if (kept.size() == ids.length) {
+			current.append(all);
+			return;
+		}
+		// a partial list always has a separator: rebuild it with the first one used
+		Matcher first = FIRST_SEPARATOR.matcher(content);
+		first.find();
+		current.append('[').append(String.join(first.group() + " ", kept)).append(']');
 	}
 }

@@ -15,8 +15,14 @@ import {
   splice,
   sseResponse,
 } from '../../../testing/sse-test-utils';
-import { CaseFormValue, DecisionView, ReducedPhoto, UiMessage } from '../model';
-import { CASE_STORE_PROVIDERS, CaseStore, WATCHDOG_MS } from './case.store';
+import { ApiError, CaseFormValue, DecisionView, ReducedPhoto, UiMessage } from '../model';
+import { t } from '../../shared/texts.pl';
+import {
+  CASE_STORE_PROVIDERS,
+  CaseStore,
+  WATCHDOG_MS,
+  chatValidationKey,
+} from './case.store';
 
 @Component({ template: '' })
 class DummyPage {}
@@ -678,5 +684,45 @@ describe('CaseStore', () => {
       expect(store.additionalPhotoCount()).toBe(0);
       expect(store.messageErrors()).toEqual({});
     });
+  });
+});
+
+/**
+ * T50 finding 5: the chat 400 VALIDATION mapping. No recorded chat 400 with a photo field error exists
+ * (only `http-400.json`, a text error), so the photo cases are tested on the ApiError value object.
+ */
+describe('chatValidationKey', () => {
+  const validation = (field: string, message: string): ApiError => ({
+    code: 'VALIDATION',
+    fieldErrors: [{ field, message }],
+  });
+
+  it('maps a photo type error to form.photo.type', () => {
+    expect(chatValidationKey(validation('photo', t('form.photo.type')), 'Tekst')).toBe('form.photo.type');
+  });
+
+  it('maps a photo size error to form.photo.size', () => {
+    expect(chatValidationKey(validation('photo', t('form.photo.size')), '')).toBe('form.photo.size');
+  });
+
+  it('maps an unknown photo message to form.photo.type, never to chat.message.empty', () => {
+    expect(chatValidationKey(validation('photo', 'Inny błąd zdjęcia'), '')).toBe('form.photo.type');
+  });
+
+  it('prefers the photo error when the text is also too long', () => {
+    expect(chatValidationKey(validation('photo', t('form.photo.size')), 'a'.repeat(2001))).toBe(
+      'form.photo.size',
+    );
+  });
+
+  it('keeps the text mappings: too long by length or by message, otherwise empty', () => {
+    expect(chatValidationKey(validation('text', t('chat.message.empty')), 'a'.repeat(2001))).toBe(
+      'chat.message.tooLong',
+    );
+    expect(chatValidationKey(validation('text', t('chat.message.tooLong')), 'krótki')).toBe(
+      'chat.message.tooLong',
+    );
+    expect(chatValidationKey(validation('text', t('chat.message.empty')), '')).toBe('chat.message.empty');
+    expect(chatValidationKey({ code: 'VALIDATION' }, '')).toBe('chat.message.empty');
   });
 });

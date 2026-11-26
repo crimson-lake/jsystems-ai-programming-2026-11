@@ -30,6 +30,7 @@ import com.hsdc.copilot.decision.DecisionResult.SuggestOtherCaseType;
 import com.hsdc.copilot.decision.DecisionService;
 import com.hsdc.copilot.llm.CancelToken;
 import com.hsdc.copilot.llm.Deadline;
+import com.hsdc.copilot.llm.LlmCancelledException;
 import com.hsdc.copilot.llm.LlmUnavailableException;
 import com.hsdc.copilot.web.SseEventWriter;
 import com.hsdc.copilot.web.sse.DecisionEvent;
@@ -84,6 +85,8 @@ class CaseServiceTurnTest {
     static final class FakeDecisions extends DecisionService {
         Decision next = decision(Label.ACCEPTED_PRELIMINARY, false, null);
         RuntimeException failDecide;
+        /** Simulates a model that sends no delta: blocks until the stream's token is cancelled, then throws. */
+        boolean stallUntilCancelled;
         Runnable duringStream = () -> {
         };
         final List<CaseSession> decided = new ArrayList<>();
@@ -106,6 +109,13 @@ class CaseServiceTurnTest {
         public String streamMessage(CaseSession session, Decision decision, MessageKind kind, Consumer<String> onDelta,
                 CancelToken cancelToken) {
             historySizeAtStream.add(session.getMessages().size());
+            if (stallUntilCancelled) {
+                long until = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+                while (!cancelToken.isCancelled() && System.nanoTime() < until) {
+                    Thread.onSpinWait();
+                }
+                throw new LlmCancelledException("stream cancelled");
+            }
             onDelta.accept("Dzień dobry, ");
             duringStream.run();
             onDelta.accept("oto odpowiedź.");
@@ -324,6 +334,121 @@ class CaseServiceTurnTest {
         assertThat(store.find(s.getCaseId())).isEmpty();
         assertThat(s.getMessages()).hasSize(messages);
         assertThat(writer.cancelToken().isCancelled()).isTrue();
+    }
+
+    // ------------------------------------------------------------------ T50 review findings
+
+    /** A store whose {@code save} runs a hook first: a DELETE landing between the commit check and the put. */
+    static final class InterleavingStore implements CaseStore {
+        final CaffeineCaseStore delegate = new CaffeineCaseStore(Duration.ofMinutes(60));
+        Runnable beforeSave = () -> {
+        };
+
+        @Override
+        public java.util.Optional<CaseSession> find(UUID caseId) {
+            return delegate.find(caseId);
+        }
+
+        @Override
+        public void save(CaseSession session) {
+            Runnable hook = beforeSave;
+            beforeSave = () -> {
+            };
+            hook.run();
+            delegate.save(session);
+        }
+
+        @Override
+        public void remove(UUID caseId) {
+            delegate.remove(caseId);
+        }
+    }
+
+    private CaseService shortBudgetService(CaseStore caseStore) {
+        return new CaseService(caseStore, analysis, decisions, triageOff, CLOCK, Duration.ofMillis(300));
+    }
+
+    @Test
+    void firstSubmission_firstDeltaDeadline_endsWithErrorTimeout_andStoresNothing() {
+        decisions.stallUntilCancelled = true;
+        CaffeineCaseStore emptyStore = new CaffeineCaseStore(Duration.ofMinutes(60));
+        RecordingEmitter emitter = new RecordingEmitter();
+        SseEventWriter writer = writer(emitter);
+
+        shortBudgetService(emptyStore).create(new CaseForm(CaseType.RETURN, Category.SMARTPHONE, "Galaxy S23",
+                LocalDate.now(CLOCK).minusDays(10), "Zmiana zdania"), JPEG, writer);
+
+        assertThat(emitter.names()).as("done or error is always last (ADR-000 section 6)").last().isEqualTo("error");
+        assertThat(emitter.events.get(emitter.events.size() - 1)).contains("TIMEOUT");
+        assertThat(emitter.names()).doesNotContain("done");
+        assertThat(emitter.completed).isTrue();
+        assertThat(emptyStore.estimatedSize()).as("nothing committed").isZero();
+        assertThat(writer.cancelToken().isCancelled()).as("the deadline is not a client disconnect").isFalse();
+    }
+
+    @Test
+    void chatTurn_firstDeltaDeadline_endsWithErrorTimeout_andCommitsNothing() {
+        CaseSession s = storedCase();
+        decisions.stallUntilCancelled = true;
+        CaseService shortBudget = shortBudgetService(store);
+        RecordingEmitter emitter = new RecordingEmitter();
+        SseEventWriter writer = writer(emitter);
+        UUID clientMessageId = UUID.randomUUID();
+        int messages = s.getMessages().size();
+        Reservation reservation = (Reservation) shortBudget.beginTurn(s.getCaseId(), clientMessageId,
+                writer.cancelToken());
+
+        shortBudget.runTurn(reservation, new TurnInput("Pytanie", null, clientMessageId), writer);
+
+        assertThat(emitter.names()).last().isEqualTo("error");
+        assertThat(emitter.events.get(emitter.events.size() - 1)).contains("TIMEOUT");
+        assertThat(emitter.names()).doesNotContain("done");
+        assertThat(s.getMessages()).hasSize(messages);
+        assertThat(s.getCommittedClientMessageIds()).isEmpty();
+        assertThat(store.find(s.getCaseId())).containsSame(s);
+    }
+
+    @Test
+    void deleteBetweenTheCommitCheckAndThePut_doesNotReinsertTheChatCase() {
+        InterleavingStore racing = new InterleavingStore();
+        CaseService racingService = new CaseService(racing, analysis, decisions, triageOff, CLOCK,
+                Duration.ofSeconds(55));
+        CaseSession s = storedCase();
+        racing.delegate.save(s);
+        RecordingEmitter emitter = new RecordingEmitter();
+        SseEventWriter writer = writer(emitter);
+        UUID clientMessageId = UUID.randomUUID();
+        Reservation reservation = (Reservation) racingService.beginTurn(s.getCaseId(), clientMessageId,
+                writer.cancelToken());
+        racing.beforeSave = () -> racingService.delete(s.getCaseId());
+
+        racingService.runTurn(reservation, new TurnInput("Pytanie", null, clientMessageId), writer);
+
+        assertThat(racing.find(s.getCaseId())).as("a deleted case is never re-inserted").isEmpty();
+        assertThat(emitter.names()).doesNotContain("done");
+        assertThat(emitter.completed).isTrue();
+    }
+
+    @Test
+    void deleteBetweenTheCommitCheckAndThePut_doesNotInsertTheNewCase() {
+        InterleavingStore racing = new InterleavingStore();
+        CaseService racingService = new CaseService(racing, analysis, decisions, triageOff, CLOCK,
+                Duration.ofSeconds(55));
+        RecordingEmitter emitter = new RecordingEmitter();
+        SseEventWriter writer = writer(emitter);
+        UUID[] created = new UUID[1];
+        racing.beforeSave = () -> {
+            created[0] = UUID.fromString(emitter.events.get(0).replaceAll(".*\"caseId\":\"([^\"]+)\".*", "$1"));
+            racingService.delete(created[0]);
+        };
+
+        racingService.create(new CaseForm(CaseType.RETURN, Category.SMARTPHONE, "Galaxy S23",
+                LocalDate.now(CLOCK).minusDays(10), "Zmiana zdania"), JPEG, writer);
+
+        assertThat(created[0]).isNotNull();
+        assertThat(racing.find(created[0])).isEmpty();
+        assertThat(racing.delegate.estimatedSize()).isZero();
+        assertThat(emitter.names()).doesNotContain("done");
     }
 
     // ------------------------------------------------------------------ wire payload

@@ -125,11 +125,12 @@ public class CaseService {
             progress(writer, Step.WRITING_REPLY);
 
             AtomicBoolean firstDelta = new AtomicBoolean();
-            watchFirstDelta(deadline, firstDelta, firstDeltaTimedOut, token);
+            CancelToken streamToken = streamToken(token);
+            watchFirstDelta(deadline, firstDelta, firstDeltaTimedOut, streamToken);
             String text = decisions.streamMessage(working, decision, MessageKind.FIRST, delta -> {
                 firstDelta.set(true);
                 send(writer, SseEventType.DELTA, new DeltaEvent(delta));
-            }, token);
+            }, streamToken);
 
             UUID messageId = UUID.randomUUID();
             working.getMessages().add(new ChatMessage(messageId, ChatMessage.Role.ASSISTANT, text, null, false, null,
@@ -263,11 +264,12 @@ public class CaseService {
             working.getMessages().add(userMessage);
 
             AtomicBoolean firstDelta = new AtomicBoolean();
-            watchFirstDelta(deadline, firstDelta, firstDeltaTimedOut, token);
+            CancelToken streamToken = streamToken(token);
+            watchFirstDelta(deadline, firstDelta, firstDeltaTimedOut, streamToken);
             String text = decisions.streamMessage(working, decision, MessageKind.REPLY, delta -> {
                 firstDelta.set(true);
                 send(writer, SseEventType.DELTA, new DeltaEvent(delta));
-            }, token);
+            }, streamToken);
 
             ChatMessage assistant = new ChatMessage(UUID.randomUUID(), ChatMessage.Role.ASSISTANT, text, null, false,
                     null, decision, decision.changed(), decision.changed() ? decision.previousLabel() : null,
@@ -286,7 +288,10 @@ public class CaseService {
             if (input.clientMessageId() != null) {
                 session.getCommittedClientMessageIds().add(input.clientMessageId());
             }
-            store.save(session);
+            if (!commit(session, token)) {
+                writer.complete();
+                return;
+            }
             writer.send(SseEventType.DONE, new DoneEvent(assistant.id()));
             writer.complete();
             log.info("Chat turn committed label={} changed={} photo={} overriddenBy={}", decision.label(),
@@ -363,14 +368,34 @@ public class CaseService {
         store.remove(caseId);
     }
 
-    /** Re-puts the session unless the case was deleted or the client left (ADR-002 section 5). */
+    /**
+     * Re-puts the session unless the case was deleted or the client left (ADR-002 section 5). A DELETE can land
+     * between the check and the put; {@link #delete} marks the session deleted before it removes it, so re-checking
+     * the flag after the put and removing again guarantees a deleted case is never re-inserted.
+     */
     private boolean commit(CaseSession session, CancelToken token) {
         if (session.isDeleted() || token.isCancelled()) {
             log.info("Turn finished after DELETE or disconnect; not stored");
             return false;
         }
         store.save(session);
+        if (session.isDeleted()) {
+            store.remove(session.getCaseId());
+            log.info("Case deleted during the commit; removed again, not stored");
+            return false;
+        }
         return true;
+    }
+
+    /**
+     * The cancellation handle of one model stream: cancelled when the client is gone or the case is deleted (the
+     * writer's token) and by the first-delta deadline. The deadline cancels only this stream token, so the writer
+     * still delivers the final {@code error{TIMEOUT}} (ADR-000 section 6: {@code done} or {@code error} is last).
+     */
+    private static CancelToken streamToken(CancelToken clientToken) {
+        CancelToken streamToken = new CancelToken();
+        clientToken.onCancel(streamToken::cancel);
+        return streamToken;
     }
 
     private void fail(SseEventWriter writer, StreamErrorEvent.Code code, String why) {

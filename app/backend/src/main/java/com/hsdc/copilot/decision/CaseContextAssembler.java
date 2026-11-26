@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Component;
 
@@ -37,6 +38,15 @@ public class CaseContextAssembler {
     public static final String DECISION_LABEL = "DECISION (final, trusted)";
     public static final String PHOTO_ONLY_MESSAGE = "CUSTOMER MESSAGE (system-generated, trusted): photo attached, no text";
     public static final int PHOTO_LIMIT = 3;
+    /** Replacement for a section-label claim found in customer text (T50 finding 2). */
+    static final String QUOTED_LABEL_SUFFIX = " (quoted by the customer, untrusted)";
+
+    /**
+     * A section name followed by a parenthesis that mentions trust, e.g. {@code CASE FACTS (system-computed, trusted)}:
+     * the shape of every input-item label. Case-insensitive; customer text cannot carry one.
+     */
+    private static final Pattern LABEL_CLAIM = Pattern.compile(
+            "(?i)(CASE\\s+FACTS|DECISION|CUSTOMER\\s+MESSAGE|CUSTOMER\\s+REASON)\\s*\\([^)\\n]*trusted[^)\\n]*\\)");
 
     private final Clock clock;
     private final JsonMapper json;
@@ -57,7 +67,7 @@ public class CaseContextAssembler {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("caseType", form.caseType());
         map.put("category", form.category());
-        map.put("model", form.model());
+        map.put("model", neutralise(form.model()));
         map.put("purchaseDate", form.purchaseDate().toString());
         map.put("today", facts.today().toString());
         map.put("daysSincePurchase", facts.daysSincePurchase());
@@ -79,7 +89,7 @@ public class CaseContextAssembler {
         if (reason == null || reason.isBlank()) {
             return Optional.empty();
         }
-        return Optional.of(text(Role.USER, CUSTOMER_REASON_LABEL + "\n" + reason));
+        return Optional.of(text(Role.USER, CUSTOMER_REASON_LABEL + "\n" + untrusted(reason)));
     }
 
     /** Prior turns in order: customer as USER (labelled untrusted), assistant body as ASSISTANT. */
@@ -105,7 +115,7 @@ public class CaseContextAssembler {
             return text(Role.USER, PHOTO_ONLY_MESSAGE);
         }
         String body = text == null ? "" : text;
-        return text(Role.USER, CUSTOMER_MESSAGE_LABEL + (hasPhoto ? " [photo attached]" : "") + "\n" + body);
+        return text(Role.USER, CUSTOMER_MESSAGE_LABEL + (hasPhoto ? " [photo attached]" : "") + "\n" + untrusted(body));
     }
 
     /** The final DECISION item of a message step. */
@@ -159,6 +169,19 @@ public class CaseContextAssembler {
             signals.add(s);
         }
         return signals;
+    }
+
+    /**
+     * The delimited body of an untrusted item: one JSON line {@code {"untrustedText": "..."}} (newlines are escaped,
+     * so customer text cannot start a line of its own) with every label claim neutralised.
+     */
+    private String untrusted(String text) {
+        return json.writeValueAsString(Map.of("untrustedText", neutralise(text)));
+    }
+
+    /** Rewrites label claims such as {@code DECISION (final, trusted)} to {@code DECISION (quoted by the customer, untrusted)}. */
+    static String neutralise(String text) {
+        return text == null ? null : LABEL_CLAIM.matcher(text).replaceAll("$1" + QUOTED_LABEL_SUFFIX);
     }
 
     private static InputItem text(Role role, String text) {

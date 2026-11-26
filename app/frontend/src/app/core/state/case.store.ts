@@ -23,6 +23,20 @@ export const MAX_ADDITIONAL_PHOTOS = 3;
 /** Longest chat message the backend accepts (AC-31). */
 export const MAX_MESSAGE_LENGTH = 2000;
 
+/**
+ * The composer text key of a chat 400 VALIDATION (ADR-003 3.7). A `photo` field error maps to its
+ * form text (`form.photo.size` by message, otherwise `form.photo.type`); then a too-long text; else
+ * `chat.message.empty`. The refusal path drops the photo preview in every case.
+ */
+export function chatValidationKey(error: ApiError, text: string): TextKey {
+  const photo = error.fieldErrors?.find((f) => f.field === 'photo');
+  if (photo) return photo.message === t('form.photo.size') ? 'form.photo.size' : 'form.photo.type';
+  const tooLong =
+    text.length > MAX_MESSAGE_LENGTH ||
+    error.fieldErrors?.some((f) => f.message === t('chat.message.tooLong'));
+  return tooLong ? 'chat.message.tooLong' : 'chat.message.empty';
+}
+
 const CHAT_URL = '/sprawa';
 const FORM_URL = '';
 
@@ -305,10 +319,7 @@ export class CaseStore implements CaseSubmitter {
         return this.refuse(turn, 'form.photo.size');
       case 'VALIDATION': {
         const text = this.pending.get(turn.userMessageId!)?.text ?? '';
-        const tooLong =
-          text.length > MAX_MESSAGE_LENGTH ||
-          error.fieldErrors?.some((f) => f.message === t('chat.message.tooLong'));
-        return this.refuse(turn, tooLong ? 'chat.message.tooLong' : 'chat.message.empty');
+        return this.refuse(turn, chatValidationKey(error, text));
       }
       default:
         return this.fail(turn);

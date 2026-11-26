@@ -133,4 +133,55 @@ class RuleIdStreamFilterTest {
 		assertThat(f.flush()).isEmpty();
 		assertThat(f.filteredText()).isEmpty();
 	}
+
+	// ---------------------------------------------------------------- bracketed ID lists (T50 finding 3)
+
+	@Test
+	void bracketedListKeepsAllowedIdsAndDropsTheOthers() {
+		RuleIdStreamFilter f = filter("R2.2");
+		assertThat(run(f, "Zgodnie z [R2.2, R9.9].")).isEqualTo("Zgodnie z [R2.2].");
+		assertThat(f.removedCount()).isEqualTo(1);
+		assertThat(logs.list).hasSize(1);
+		assertThat(logs.list.get(0).getFormattedMessage()).contains("R9.9").contains(CASE_ID.toString());
+	}
+
+	@Test
+	void bracketedListWithNoAllowedIdIsDroppedEntirely() {
+		RuleIdStreamFilter f = filter("R2.2");
+		assertThat(run(f, "a [R9.9; C1] b")).isEqualTo("a  b");
+		assertThat(f.removedCount()).isEqualTo(2);
+	}
+
+	@Test
+	void bracketedListOfAllowedIdsIsKeptVerbatim() {
+		RuleIdStreamFilter f = filter("R2.2", "R2.3");
+		assertThat(run(f, "[R2.2,R2.3] i [R2.2 ;  R2.3]")).isEqualTo("[R2.2,R2.3] i [R2.2 ;  R2.3]");
+		assertThat(f.removedCount()).isZero();
+	}
+
+	@Test
+	void semicolonListIsRebuiltWithSemicolons() {
+		RuleIdStreamFilter f = filter("C8", "C2.3");
+		assertThat(run(f, "[C8; C7.1; C2.3]")).isEqualTo("[C8; C2.3]");
+		assertThat(f.removedCount()).isEqualTo(1);
+	}
+
+	@Test
+	void bracketedListSplitAcrossDeltasIsHeldBackUntilItCompletes() {
+		RuleIdStreamFilter f = filter("R2.2", "R2.3");
+		assertThat(f.accept("zob. [R2.2, R")).isEqualTo("zob. ");
+		assertThat(f.accept("9.9; R2")).isEmpty();
+		assertThat(f.accept(".3] koniec")).isEqualTo("[R2.2, R2.3] koniec");
+		assertThat(f.flush()).isEmpty();
+		assertThat(f.filteredText()).isEqualTo("zob. [R2.2, R2.3] koniec");
+		assertThat(f.removedCount()).isEqualTo(1);
+	}
+
+	@Test
+	void bracketsThatAreNotIdListsAreUntouched() {
+		RuleIdStreamFilter f = filter("R2.2");
+		String text = "[uwaga, R9.9] [R9.9, uwaga] [R9.9, ] [R9.9 R2.2] [LG C3, Canon R5] LG C3, Canon R5";
+		assertThat(run(f, text)).isEqualTo(text);
+		assertThat(f.removedCount()).isZero();
+	}
 }
