@@ -57,3 +57,15 @@ Screenshots from per-task QA and phase gates (plan §4.5). Each entry gives the 
 | `Q2/03-shell-390.png` | Same at 390 px | Header stacks, no overlap |
 | — | `GET :4200/api/does-not-exist` | JSON 404 without internals (proxy works) |
 | — | Console | 0 errors, 0 warnings |
+
+## T31 — Case form (2026-11-26)
+
+- **App commit:** the T31 commit (frontend dev server; submission is wired in T32).
+
+| File | Step | Result |
+|---|---|---|
+| `T31/01-empty-1280.png` | Open `/` | Fields in AC-01 order, no preselection, info line, orange CTA "Wyślij zgłoszenie" |
+| `T31/02-validation-errors-1280.png` | Click "Wyślij zgłoszenie" on the empty form | Polish inline errors on every field; focus moved to the first invalid control (case-type radio, AC-13) |
+| `T31/03-filled-complaint-1280.png` | Reklamacja, Laptop, model, typed date `10.10.2026`, reason, `laptop-1.png` | Reason required marker shown for Reklamacja, complaint photo hint, thumbnail + file name + "Usuń", counter 41/2000 |
+| `T31/04-filled-complaint-390.png` | Same at 390 px | Single column, `scrollWidth` 390 = `clientWidth` (no horizontal scroll) |
+| — | Console | 0 errors, 0 warnings |

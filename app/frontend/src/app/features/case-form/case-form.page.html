@@ -1,0 +1,86 @@
+<form class="case-form" novalidate [formGroup]="form" (ngSubmit)="onSubmit()">
+  <p class="case-form__info">{{ infoText }}</p>
+
+  <div class="case-form__group">
+    <app-case-type-cards [control]="caseTypeControl" />
+    @if (showError('caseType')) {
+      <p class="case-form__error" role="alert">{{ errorText('caseType') }}</p>
+    }
+  </div>
+
+  <mat-form-field class="case-form__field">
+    <mat-label>{{ labels.category }}</mat-label>
+    <mat-select formControlName="category">
+      @for (category of categories; track category.code) {
+        <mat-option [value]="category.code">{{ category.label }}</mat-option>
+      }
+    </mat-select>
+    @if (errorText('category'); as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+
+  <mat-form-field class="case-form__field">
+    <mat-label>{{ labels.model }}</mat-label>
+    <input #modelInput matInput formControlName="model" required [placeholder]="modelPlaceholder" />
+    @if (errorText('model'); as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+
+  <mat-form-field class="case-form__field">
+    <mat-label>{{ labels.purchaseDate }}</mat-label>
+    <input
+      #dateInput
+      matInput
+      formControlName="purchaseDate"
+      [matDatepicker]="picker"
+      [min]="minDate"
+      [max]="today"
+      [placeholder]="labels.purchaseDatePlaceholder"
+    />
+    <mat-datepicker-toggle matIconSuffix [for]="picker" />
+    <mat-datepicker #picker />
+    @if (errorText('purchaseDate'); as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+
+  <mat-form-field class="case-form__field">
+    <mat-label>{{ labels.reason }}</mat-label>
+    <textarea
+      #reasonInput
+      matInput
+      rows="5"
+      formControlName="reason"
+      [required]="isComplaint()"
+      [attr.maxlength]="maxReason"
+    ></textarea>
+    <mat-hint align="end">{{ reasonLength() }}/{{ maxReason }}</mat-hint>
+    @if (errorText('reason'); as message) {
+      <mat-error>{{ message }}</mat-error>
+    }
+  </mat-form-field>
+
+  <app-photo-picker
+    [caseType]="photoType"
+    [disabled]="busy()"
+    [showRequired]="photoRequired()"
+    (photoChange)="onPhotoChange($event)"
+  />
+
+  @if (busy()) {
+    <app-submit-progress [step]="submitter.progressStep()" />
+  }
+
+  @if (submitter.submitError()) {
+    <div class="case-form__banner" role="alert">
+      <span>{{ submitErrorText }}</span>
+      <button mat-stroked-button type="button" (click)="retry()">{{ retryText }}</button>
+    </div>
+  }
+
+  <button class="app-cta" mat-flat-button type="submit" [disabled]="busy()">
+    {{ submitText }}
+  </button>
+</form>

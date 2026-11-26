@@ -1,0 +1,47 @@
+<div class="photo-picker">
+  <span class="photo-picker__label">{{ label }}<span aria-hidden="true"> *</span></span>
+  <p class="photo-picker__hint" id="photo-hint">{{ hint() }}</p>
+  <div
+    class="photo-picker__zone"
+    [class.is-dragging]="dragging()"
+    [class.is-invalid]="error()"
+    (dragover)="onDragOver($event)"
+    (dragleave)="dragging.set(false)"
+    (drop)="onDrop($event)"
+  >
+    <input
+      #fileInput
+      type="file"
+      hidden
+      accept="image/jpeg,image/png,image/webp"
+      (change)="onChange($event)"
+    />
+    <button
+      #pickButton
+      mat-stroked-button
+      type="button"
+      aria-describedby="photo-hint"
+      [disabled]="disabled()"
+      (click)="open()"
+    >
+      {{ buttonText }}
+    </button>
+    @if (photo(); as p) {
+      <div class="photo-picker__preview">
+        <img
+          class="photo-picker__thumb"
+          data-testid="photo-thumbnail"
+          alt=""
+          [src]="p.reduced.objectUrl"
+        />
+        <span class="photo-picker__name">{{ p.reduced.originalName }}</span>
+        <button mat-button type="button" [disabled]="disabled()" (click)="remove()">
+          {{ removeText }}
+        </button>
+      </div>
+    }
+  </div>
+  @if (error(); as message) {
+    <p class="photo-picker__error" role="alert">{{ message }}</p>
+  }
+</div>

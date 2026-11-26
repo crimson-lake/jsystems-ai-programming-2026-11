@@ -1,0 +1,54 @@
+:host {
+  display: block;
+}
+
+.case-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.case-form__info {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--app-radius);
+  background: var(--mat-sys-surface-container-low);
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-medium);
+}
+
+.case-form__field {
+  width: 100%;
+}
+
+.case-form__error {
+  margin: 4px 0 0;
+  padding: 0 16px;
+  color: var(--mat-sys-error);
+  font: var(--mat-sys-body-small);
+}
+
+.case-form__banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--mat-sys-error);
+  border-radius: var(--app-radius);
+  color: var(--mat-sys-error);
+  font: var(--mat-sys-body-medium);
+}
+
+.app-cta {
+  align-self: flex-start;
+}
+
+@media (max-width: 599px) {
+  .app-cta {
+    align-self: stretch;
+  }
+}
