@@ -133,6 +133,16 @@ describe('MessageListComponent', () => {
       expect(newMessages()).toBeDefined();
     });
 
+    it('keeps the start of a reply taller than the viewport in view (safety block, badge; Q3 finding)', async () => {
+      await scrollTo(100); // pinned
+      const message = el.querySelector<HTMLElement>('[data-testid="assistant-message"]')!;
+      // The reply starts 40 px below the top of the scrolled content and is 500 px tall (viewport 300).
+      vi.spyOn(scroller, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 300, 300));
+      vi.spyOn(message, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 40 - 100, 300, 500));
+      await grow(400, 'Bardzo długa odpowiedź');
+      expect(scroller.scrollTop).toBe(40 - 8);
+    });
+
     it('the button scrolls to the bottom and disappears', async () => {
       await scrollTo(0);
       await grow(200, 'Dużo nowego tekstu');

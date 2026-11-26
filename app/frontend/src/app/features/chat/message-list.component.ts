@@ -21,6 +21,8 @@ import { UserMessageComponent } from './user-message.component';
 
 /** Follow the newest content only while the customer is this close to the bottom (AC-39). */
 export const PIN_THRESHOLD_PX = 80;
+/** Space kept above the start of a long reply when following it. */
+const REPLY_TOP_MARGIN_PX = 8;
 
 /**
  * Message container: bubbles in store order plus the typing indicator, in a scroll region that
@@ -128,7 +130,7 @@ export class MessageListComponent {
 
   protected jumpToBottom(): void {
     this.pinned = true;
-    this.scrollToBottom();
+    this.scrollToBottom(false);
     this.showNewMessages.set(false);
   }
 
@@ -145,9 +147,26 @@ export class MessageListComponent {
     return el.scrollHeight - el.clientHeight - el.scrollTop;
   }
 
-  private scrollToBottom(): void {
+  /**
+   * Follows the newest content, but never past the start of the latest assistant reply when that reply is taller
+   * than the viewport, so its safety block, badge and first section stay readable (AC-22, AC-26; Q3 finding).
+   * The "Nowe wiadomości" button passes {@code capAtReplyStart = false} and goes to the very end.
+   */
+  private scrollToBottom(capAtReplyStart = true): void {
     const el = this.scroller().nativeElement;
-    el.scrollTop = el.scrollHeight;
+    let target = el.scrollHeight;
+    if (capAtReplyStart && this.store.messages().at(-1)?.role === 'assistant') {
+      const replies = el.querySelectorAll<HTMLElement>('[data-testid="assistant-message"]');
+      const reply = replies.item(replies.length - 1);
+      if (reply) {
+        const box = reply.getBoundingClientRect();
+        if (box.height > el.clientHeight) {
+          const start = box.top - el.getBoundingClientRect().top + el.scrollTop;
+          target = Math.min(target, Math.max(0, start - REPLY_TOP_MARGIN_PX));
+        }
+      }
+    }
+    el.scrollTop = target;
     this.lastHeight = el.scrollHeight;
   }
 }
