@@ -42,14 +42,15 @@
 | Component | Responsibility |
 |---|---|
 | `OpenRouterProperties` | Typed configuration: `apiKey`, `baseUrl`, `visionModel`, `decisionModel`, `decisionReasoningEffort`, `appTitle`, `appUrl`, `timeouts` |
-| `OpenAiClientConfig` | Defines **one** `OpenAIClient` bean (README: "Don't create more than one client"). Built with `OpenAIOkHttpClient.builder()` with `apiKey(OPENROUTER_API_KEY)`, `baseUrl(OPENROUTER_BASE_URL)`, `maxRetries(1)` and a per-client timeout of 60 s. The `HTTP-Referer` and `X-OpenRouter-Title` headers are added for every request. **The SDK default env vars `OPENAI_API_KEY`/`OPENAI_BASE_URL` are not used** |
+| `OpenAiClientConfig` | Defines **one** `OpenAIClient` bean (README: "Don't create more than one client"). Built with `OpenAIOkHttpClient.builder()` with `apiKey(OPENROUTER_API_KEY)`, `baseUrl(OPENROUTER_BASE_URL)`, **`maxRetries(0)`** and a client timeout of 60 s. Each call additionally sets its own `RequestOptions` timeout from the budget in §3.6. Retries are never left to the SDK, because they would break the time budget. The `HTTP-Referer` and `X-OpenRouter-Title` headers are added for every request. **The SDK default env vars `OPENAI_API_KEY`/`OPENAI_BASE_URL` are not used** |
 | `LlmGateway` (interface) | Provider-neutral port with three operations: `structured(request, Class<T>) → T`, `stream(request, deltaConsumer, cancelToken) → StreamResult`, and `describe()` for logging |
 | `ResponsesApiGateway` | The only class importing the SDK. It maps an `LlmRequest` (model, instructions, input items, images, reasoning effort, JSON-schema class) to `ResponseCreateParams` and calls `client.responses().create(...)` or `.createStreaming(...)`. It maps stream events and SDK exceptions to domain results |
 | `ChatCompletionsGateway` | **Fallback only**. Not built unless spike S-1 fails (§6 D-L1) |
 | `PromptRepository` | Loads `classpath:prompts/*.md` at startup. Fails fast if a file is missing. Fills named placeholders (`{{policy}}`, `{{today}}` …) by plain string replacement |
-| `PolicyRepository` | Loads `classpath:policies/return-policy.md` and `complaint-policy.md`. Extracts the **set of valid rule IDs** per policy with the patterns `^## (R\|C)\d+\.` (section IDs, e.g. `R6`, `C8`) and `^(R\|C)\d+\.\d+\.` (sub-rule IDs, e.g. `R2.3`). Currently valid: `R1–R6, R1.1…R5.3` and `C1–C8, C1.1…C7.1` |
+| `PolicyRepository` | Loads `classpath:policies/return-policy.md` and `complaint-policy.md`. Extracts the **set of valid rule IDs** per policy with the patterns `^## (R\|C)\d+\.` (section IDs, e.g. `R6`, `C8`) and `^(R\|C)\d+\.\d+\.` (sub-rule IDs, e.g. `R2.3`). Currently valid: `R1–R7, R1.1…R5.3, R7.1` and `C1–C8, C1.1…C7.1` |
 | `ImageAnalysisService` | Builds the vision request for the case type and returns a typed `ImageAnalysis` |
-| `DecisionService` | Step 1 makes the structured decision, step 2 runs `Guardrails` and `RuleIdValidator`, and step 3 streams the message |
+| `DecisionService` | Step 1 makes the structured decision, step 2 runs `RuleIdValidator` and then `Guardrails`, and step 3 streams the message through `RuleIdStreamFilter` |
+| `RuleIdStreamFilter` | Enforces AC-23 on the streamed text (§3.4): passes deltas through, but holds back any partial token matching `[RC]\d+(\.\d+)?` until it is complete. Removes any complete ID that is not in `decision.ruleIds`. Logs every removal at WARN with the case ID |
 | `Guardrails` | Deterministic overrides (§3.4). Pure functions with no I/O |
 | `CaseFacts` | Computed facts: `today` (Europe/Warsaw), `daysSincePurchase`, `returnWindowExceeded`, `complaintPeriodExceeded` |
 
@@ -63,8 +64,8 @@ The PRD requires four distinct instruction sets (PRD §8). Two auxiliary prompts
 | `vision-complaint.md` | Image analysis, COMPLAINT | Report: damage visible, type, location, likely cause (enum), confidence (enum), usable photo, category match, safety hazard. Fill `summaryPl` (AC-17, AC-18) |
 | `decision-return.md` | Structured decision, RETURN | Role, the four labels with their criteria (PRD §11 table), and the "allowed / not allowed" lists. Only Return Policy rule IDs may be cited. Includes `{{policy}}` (the full Return Policy) |
 | `decision-complaint.md` | Structured decision, COMPLAINT | Same structure with the Complaint Policy, plus C7 safety and C8 escalation |
-| `message-first.md` | Streamed first message | Polish, informal "Ty" form, at most about 250 words. Exactly three `###` sections: "Co widzimy na zdjęciu", "Uzasadnienie" (with rule IDs from the decision), "Kolejne kroki" (numbered list). No greeting, badge, safety block or disclaimer: the UI adds those (§3.5). Mention the other case type when `suggestOtherCaseType` is set (AC-28) |
-| `message-reply.md` | Streamed chat reply | Answer using the full context. If `changed=true`, explain the new decision with the same three sections; otherwise answer the question. Covers off-topic refusal, no promises, no repair instructions, Polish only (AC-45) |
+| `message-first.md` | Streamed first message | Polish, informal "Ty" form, at most about 250 words. Exactly three `###` sections: "Co widzimy na zdjęciu", "Uzasadnienie" (it may cite **only** the IDs in `decision.ruleIds`, which are listed in the input), "Kolejne kroki" (numbered list). No greeting, badge, safety block or disclaimer: the UI adds those (§3.5). Mention the other case type when `suggestOtherCaseType` is set (AC-28) |
+| `message-reply.md` | Streamed chat reply | Answer using the full context. If `changed=true`, explain the new decision with the same three sections; otherwise answer the question. Cite only IDs in `decision.ruleIds`. Covers off-topic refusal, no promises, no repair instructions, Polish only (AC-45). When the photo limit is reached and the label is still NEEDS_MORE_INFO, the next steps tell the customer to bring the device to a Store shop (R5.1 / C6.1, PRD §12) |
 
 Prompt rules that apply to every file:
 - Customer-provided text (reason, chat messages) is passed **only** inside clearly delimited input items labelled as customer data.
@@ -90,7 +91,7 @@ The assistant history format must be confirmed in spike S-1 (§6). OpenRouter's 
 
 ### 3.4 Decision pipeline and guardrails
 
-For the first submission, a **triage stage** (ADR-004) runs before this pipeline. It can route the case to a fast path that skips every step below. Otherwise it contributes `triageSignals`. Guardrails G1–G6 apply on both paths.
+For the first submission, a **triage stage** (ADR-004) runs before this pipeline and contributes `triageSignals`. Its fast path, which would skip the steps below, is not enabled in the PoC. The guardrails apply on every path.
 
 The pipeline is **two steps per turn** (decision D-L2):
 
@@ -98,11 +99,19 @@ The pipeline is **two steps per turn** (decision D-L2):
    - Call `responses.create` with `text(DecisionResult.class)` (JSON schema derived from the class by the SDK, `strict` on).
    - Use model `LLM_DECISION_MODEL` with reasoning effort `LLM_DECISION_REASONING_EFFORT` (default `medium`).
    - Set `provider.require_parameters: true` (an OpenRouter extension, added with `putAdditionalBodyProperty`), so the request routes only to endpoints that support structured outputs.
-2. **Validate and enforce** using `Guardrails` and `RuleIdValidator`.
+2. **Validate and enforce**, in this fixed order:
+   1. **G6 rule-ID validation** (`RuleIdValidator`):
+      - If `ruleIds` contains an ID outside the applied policy, make one corrective re-ask that lists the valid IDs, but only if ≥ 15 s remain in the deadline.
+      - If the IDs are still invalid, or there is no time for a re-ask, drop the unknown IDs.
+      - If none remain, the label becomes `ESCALATED` with `R6` (return) or `C8` (complaint).
+   2. **G1–G5**: the first matching rule wins and records `overriddenBy`.
+      - An override **replaces** `ruleIds` with the enforced ID(s) from the table, followed by the model's remaining IDs, which are kept only if the overriding rule is G4 (photo problem, where the model's IDs still explain the request). At most 5 IDs.
+      - An override also sets `reasonCode` (G1 → `SAFETY`, G2/G3 → `OUTSIDE_WINDOW`, G4 → `PHOTO_UNUSABLE` or `CATEGORY_MISMATCH`, G5 → `UNCERTAIN_CAUSE`).
+   3. **`changeReasonPl`**: when the final label differs from `currentDecision.label` and the label was set by a guardrail, it is replaced by a **fixed Polish text per guardrail** from `classpath:messages/guardrail-reasons.pl.properties`. Otherwise the model's text is kept. Strict-schema limits (1–5 IDs, ≤ 300 chars) are also enforced in code, because structured-output compliance "is not guaranteed on every endpoint".
 3. **Streamed message**:
    - Call `responses.createStreaming` with `message-first.md` or `message-reply.md`.
    - Use reasoning effort `low`.
-   - Forward only `response.output_text.delta` text.
+   - Forward only `response.output_text.delta` text, passed through `RuleIdStreamFilter`, so that no rule ID outside `decision.ruleIds` reaches the customer (AC-23).
 
 `DecisionResult` (model output schema):
 
@@ -115,18 +124,21 @@ The pipeline is **two steps per turn** (decision D-L2):
 | `changeReasonPl` | string ≤ 300 chars, may be empty | Polish reason shown in the "Zmiana decyzji" block (AC-35) |
 | `missingInfoPl` | string ≤ 300 chars, may be empty | What photo or information is needed (AC-19) |
 
-`Guardrails`: deterministic rules applied in this order. The first matching rule wins and records `overriddenBy`.
+`Guardrails` G1–G5: deterministic rules, run after G6 (step 2 above), in the order of PRD §11 "Precedence when criteria conflict". The first matching rule wins.
 
 | # | Condition (computed, not asked from the model) | Enforced result | PRD |
 |---|---|---|---|
-| G1 | Any analysis has `safetyHazard=true`, **or** the customer text matches the safety lexicon (`spuch*`, `dym*`, `iskr*`, `przypal*`, `swąd*`, `pal* się`, `zapach spalenizny`, `odsłonięt* przewod*`) | `ESCALATED`, `safety=true`; ruleIds include `C7.1` (complaint) or `R6` (return) | AC-26, C7.1 |
+| G1 | **Any** of these, in every `TRIAGE_MODE`:<br>• any analysis has `safetyHazard=true`;<br>• triage `safety_hazard` P(true) ≥ `TRIAGE_SAFETY_PROBABILITY` (ADR-004);<br>• the customer text, lower-cased and without diacritics, matches the safety lexicon: `spuch*`, `napuch*`, `puchnie`, `wybrzusz*`, `dym*`, `iskr*`, `przypal*`, `nadpal*`, `spalon*`, `spalenizn*`, `swad*`, `pali sie`, `zapalil*`, `ogien`, `pozar`, `przegrzew*`, `goraca bateria`, `odslonie* przewod*` | `ESCALATED`, `safety=true`; ruleIds = `R7.1` (return) or `C7.1` (complaint) | AC-26, R7.1, C7.1 |
 | G2 | RETURN and `daysSincePurchase > 30` (day 1 = the day after purchase, R2.3) | `REJECTED`, ruleIds include `R2.3` | AC-24 |
 | G3 | COMPLAINT and `today > purchaseDate + 2 years` | `REJECTED`, ruleIds include `C2.3` | AC-25 |
 | G4 | First decision, and the analysis has `photoUsable=false` or `matchesCategory=false` | `NEEDS_MORE_INFO` | AC-19 |
 | G5 | COMPLAINT, model `label=REJECTED`, latest analysis `causeConfidence=LOW` | `ESCALATED`, ruleIds include `C8` | AC-27 |
-| G6 | `ruleIds` contains an ID that is not in the applied policy's ID set | One corrective re-ask that lists the valid IDs. If it is still invalid, drop the unknown IDs. If none remain, return `ESCALATED` with `R6`/`C8` | AC-21, AC-23 |
+G6 (rule-ID validation) is described in step 2.1 above and always runs **before** G1–G5.
 
-Revision rule: `changed = (validated label ≠ currentDecision.label)`. The "Zmiana decyzji" block is driven only by this computed flag, never by the model's text (AC-35, AC-36).
+**Revision rule:**
+- `changed = (validated label ≠ currentDecision.label)`.
+- The "Zmiana decyzji" block is driven only by this computed flag, never by the model's text (AC-35, AC-36).
+- `safety` is a property of the current decision. Once a case is ESCALATED for safety, later replies keep `safety=true` in their decision snapshot, but the UI shows the safety block only on messages that also show a badge (§3.5).
 
 ### 3.5 Message composition: what is model-generated and what is fixed
 
@@ -134,14 +146,15 @@ To make AC-22, AC-26 and AC-35 order-proof, the assistant message is rendered fr
 
 | Order | Segment | Source |
 |---|---|---|
-| 1 | Safety block (only if `safety`) | Fixed Polish text in the frontend: stop using and charging, keep away from flammable materials (C7.1) |
+| 1 | Safety block (only if `safety`, and only on the first message or a changed reply) | Fixed Polish text in the frontend (ADR-003 §3.7): stop using and charging, keep away from flammable materials (R7.1 / C7.1) |
 | 2 | "Zmiana decyzji" block (only if `changed`) | UI component: previous badge → new badge + `changeReasonPl` |
 | 3 | Greeting (first message only) | Fixed frontend text |
 | 4 | Decision badge (first message and changed replies) | UI component from the `decision` event |
 | 5 | Body | **Streamed model markdown** (three sections or a free answer) |
 | 6 | Disclaimer (first message and changed replies) | Fixed exact text from PRD §11, in the frontend |
 
-AC-26 states that safety instructions begin the message, "before the decision badge content". For a safety case the greeting therefore comes after the safety block.
+- AC-26 states that safety instructions begin the message, "before the decision badge content", so for a safety case the greeting comes after the safety block.
+- AC-35, as amended on 2026-11-26, allows only the safety block before "Zmiana decyzji".
 
 ### 3.6 Streaming, cancellation and errors
 
@@ -152,26 +165,33 @@ AC-26 states that safety instructions begin the message, "before the decision ba
   - When the browser disconnects (SSE heartbeat write fails, ADR-002), the gateway closes the SDK stream (`StreamResponse.close()`).
   - The OpenRouter docs state that aborting stops billing only for some providers, including OpenAI.
 
-**Time budget for the first decision (AC-29), tracked by a per-request `Deadline` of 55 s:**
+**Time budget (AC-29, AC-40).** Every turn, first submission and chat message alike, is tracked by a per-request `Deadline` of **55 s until the `decision` event**. This is the single budget table; ADR-002 and ADR-004 refer to it.
 
-| Call | Per-call timeout | Retries |
-|---|---|---|
-| Vision | 25 s | Up to 1 retry if ≥ 20 s remain |
-| Decision | 25 s | Up to 1 retry if ≥ 20 s remain |
-| Stream | Must produce its first delta before the deadline | — |
+| Step | Per-call timeout | Retries | Runs on |
+|---|---|---|---|
+| Triage (ADR-004) | 8 s | none; on failure, continue without signals | First submission only |
+| Vision | 20 s | none | Turns with a photo |
+| Structured decision | 20 s | none | Every turn |
+| G6 corrective re-ask | the remaining time, max 15 s | only if ≥ 15 s remain | Only when IDs are invalid |
+| Stream: first delta | before the 55 s deadline | none | Every turn |
+| Stream: whole message | 60 s after the `decision` event | none | Every turn |
 
-If the deadline passes before the `decision` event, the result is `TIMEOUT`.
+- **Worst case before `decision`:** 8 + 20 + 20 = 48 s, plus the re-ask only when time remains.
+- **Retries:** there are no automatic retries (SDK `maxRetries(0)`). The customer retries through "Spróbuj ponownie" (AC-40, AC-41).
+- **Deadline:** if it passes before the `decision` event, the result is `TIMEOUT`.
+- **Frontend watchdog:** the frontend aborts after 60 s without a `decision` event (ADR-003 §3.5).
 
 **Error mapping:** every case produces a Polish user-facing message and never exposes internals.
 
 | Source | Domain error | User message (SSE `error`) |
 |---|---|---|
-| HTTP 401/403/402 | `AI_CONFIG` (logged at ERROR) | "Nie udało się przeanalizować zgłoszenia. Spróbuj ponownie." |
+| HTTP 401/403/402 | `AI_CONFIG` (internal; logged at ERROR). **Sent on the wire as `AI_UNAVAILABLE`** | "Nie udało się przeanalizować zgłoszenia. Spróbuj ponownie." |
 | HTTP 408/429/5xx, network failure | `AI_UNAVAILABLE` | same |
-| `response.failed` / `incomplete` / schema parse failure after retry | `AI_UNAVAILABLE` | same |
+| `response.failed` / `incomplete` / schema parse failure | `AI_UNAVAILABLE` | same |
 | Deadline exceeded | `TIMEOUT` | same |
 
-In chat, the same codes are rendered as the inline error with "Spróbuj ponownie" (AC-41).
+- The wire `error.code` set is exactly `AI_UNAVAILABLE | TIMEOUT` (ADR-000 §6).
+- The **chat** inline error text differs (ADR-003 §3.7), but uses the same codes and the "Spróbuj ponownie" action (AC-41).
 
 ---
 
@@ -180,7 +200,7 @@ In chat, the same codes are rendered as the inline error with "Spróbuj ponownie
 - `LlmRequest`: `model`, `instructions` (string), `inputItems` (ordered list of `{role, text}` or `{role, text, imageDataUrl}`), `reasoningEffort` (`none|low|medium|high`), `schema` (optional Java class), `timeout`.
 - `ImageAnalysis`: a structured output class. The fields are listed in ADR-000 §5. All enums are closed, and the strings are limited to 500 characters.
 - `DecisionResult`: §3.4.
-- `Decision` (validated): `DecisionResult` + `safety` + `changed` + `previousLabel` + `overriddenBy` (`G1…G6` or empty).
+- `Decision` (validated): `DecisionResult` (with `changeReasonPl` possibly replaced, §3.4) + `safety` + `changed` + `previousLabel` + `overriddenBy` (`G1…G6` or empty).
 - `StreamResult`: `fullText`, `inputTokens`, `outputTokens`, `finishStatus` (`COMPLETED|FAILED|INCOMPLETE|CANCELLED`).
 
 ---
@@ -230,13 +250,19 @@ In chat, the same codes are rendered as the inline error with "Spróbuj ponownie
 - (−) Some OpenRouter extensions (`provider.require_parameters`, `models` fallback) are documented only on the Chat Completions schema, and whether `/responses` honors them is **unverified**. S-1 must check this.
 
 **Spike S-1 (first implementation task, before any production code):**
-- Using the synthetic photos in `assets/example-images/`, capture verbatim OpenRouter responses for these calls against `openai/gpt-6-luna`:
+- Using the example photos in `assets/example-images/` (real photos, unedited, with no description of their content in the prompt), capture verbatim OpenRouter responses for these calls against `openai/gpt-6-luna`:
   - (a) `responses.create` with an image and `text(ImageAnalysis.class)`;
   - (b) `responses.create` with `text(DecisionResult.class)` and `provider.require_parameters`;
   - (c) `createStreaming` with plain text;
   - (d) a three-turn history including assistant turns;
-  - (e) an invalid key → 401.
+  - (e) an invalid key → 401;
+  - (f) a non-existent model ID → the provider's error shape;
+  - (g) if obtainable, any `response.failed` or `response.incomplete` stream event (e.g. with a very low `max_output_tokens`).
+- The schema classes used by (a) and (b) are **provisional test-scope records** in the capture test. The production records are created later from the same shape (plan T14).
 - Save each capture (status, headers without the key, body or SSE transcript, date, model) under `app/backend/src/test/resources/openrouter-captures/`. WireMock stubs are derived only from these captures (AGENTS.md).
+- **Documented synthetic exceptions:**
+  - HTTP 502, a stalled connection (timeout) and, if (g) could not be captured, `response.failed` cannot be triggered safely.
+  - Their stubs reuse the captured envelope ((e), (f)) with the documented status or event type from the OpenRouter errors and streaming pages, and record that origin in the stub file.
 - If (a), (b) or (d) cannot be made to work, switch to `ChatCompletionsGateway` and update this ADR.
 
 **Review trigger:** S-1 fails; OpenRouter marks Responses as beta or deprecated; or model fallback routing (`models: [...]`) becomes a requirement.
@@ -333,9 +359,13 @@ flowchart TD
   B -- no --> D
   C --> D[Compute CaseFacts<br/>today Europe/Warsaw, daysSincePurchase]
   D --> E[Structured decision call<br/>decision-return.md / decision-complaint.md + policy<br/>text: DecisionResult schema]
-  E --> F{Rule IDs valid?}
-  F -- no --> F1[One corrective re-ask] --> F
-  F -- yes --> G[Guardrails G1..G5]
+  E --> F{G6: rule IDs valid?}
+  F -- "no, ≥15 s left" --> F1[One corrective re-ask] --> F2{valid now?}
+  F2 -- no --> F3[Drop unknown IDs; none left → ESCALATED R6/C8]
+  F -- "no, no time" --> F3
+  F2 -- yes --> G
+  F3 --> G
+  F -- yes --> G[Guardrails G1..G5<br/>first match wins, PRD §11 precedence]
   G --> H[Validated Decision<br/>changed = label != current]
   H --> I[SSE decision event]
   I --> J[Streamed message call<br/>message-first.md / message-reply.md]
@@ -381,21 +411,24 @@ sequenceDiagram
 | Request mapping | Unit | `LlmRequest` with image + schema | `ResponseCreateParams` has `instructions`, the input text before `input_image`, a data URL, and `text.format` json_schema | Reasoning effort `none` |
 | History replay | Unit | Case with 3 turns | Input items in order: facts, reason, user/assistant alternating, decision | Empty reason for RETURN |
 | Rule-ID extraction | Unit | Current policy files | The ID sets equal the lists in §3.1 | A new sub-rule added → picked up |
-| Guardrail G1 safety | Unit | Analysis `safetyHazard=true`, model ACCEPTED | ESCALATED, `safety`, `C7.1` | Lexicon match in the chat text only |
+| Guardrail G1 safety | Unit | Analysis `safetyHazard=true`, model ACCEPTED | ESCALATED, `safety`, `C7.1` (complaint) / `R7.1` (return) | Lexicon match in the chat text only, incl. "napuchnięta", "nadpalony", "przegrzewa się", "ogień" with and without diacritics; triage P(true)=0.30/0.29; **RETURN 45 days old + safety → ESCALATED, not REJECTED** |
+| Guardrail ID replacement | Unit | G2 overrides a model ACCEPTED with `R3.1` | ruleIds = `[R2.3]`, reasonCode `OUTSIDE_WINDOW`, fixed `changeReasonPl` when the label changed | G4 keeps the model's IDs |
+| Stream rule-ID filter | Unit | Deltas `"…zgodnie z R"`, `"9.9 i R2."`, `"3."` with decision IDs `[R2.3]` | Output text contains `R2.3` and not `R9.9`; a WARN is logged | ID split across 3 deltas; text ending with a partial `R` |
 | Guardrail G2 window | Unit | RETURN, purchase = today − 30 / − 31 days | ACCEPTED allowed / REJECTED with `R2.3` | Purchase today (0 days) |
 | Guardrail G3 | Unit | COMPLAINT, purchase = today − 2y / − 2y − 1d | Allowed / REJECTED with `C2.3` | 29 February purchase |
 | Guardrail G5 | Unit | COMPLAINT, LOW confidence, model REJECTED | ESCALATED with `C8` | MEDIUM confidence → REJECTED kept |
-| Rule-ID validation G6 | Unit | Model returns `C2.3` on a RETURN case | Re-ask once, then drop → ESCALATED if empty | Valid + invalid mix |
+| Rule-ID validation G6 | Unit | Model returns `C2.3` on a RETURN case | Re-ask once (if ≥ 15 s left), then drop → ESCALATED with `R6` if empty | Valid + invalid mix; < 15 s left → no re-ask |
 | Change flag | Unit | Current REJECTED, new ACCEPTED | `changed=true`, `previousLabel=REJECTED` | Same label → `changed=false` |
 | Stream mapping | Unit | Fake event sequence incl. reasoning deltas and `response.failed` | Only text deltas forwarded; FAILED → `LlmUnavailable` | Zero deltas then completed |
-| Structured call via WireMock | Integration | Stub = capture S-1(b) | `DecisionResult` parsed | Stub with an invalid enum → retry, then error |
+| Structured call via WireMock | Integration | Stub = capture S-1(b) | `DecisionResult` parsed | Stub with an invalid enum → `AI_UNAVAILABLE` (no automatic retry) |
 | Streaming via WireMock | Integration | Stub = capture S-1(c) as an SSE body | Deltas in order and usage logged | Stub with a 502; stub stalls past the timeout |
-| AI evals | Eval (real model) | `app/evals/cases/*.json`: about 20 synthetic cases (example photos + form + expected label/ruleIds/safety) covering Flows 4.1–4.7 and the injection case | Label accuracy ≥ 90%; safety and window cases 100%; cited IDs ⊆ policy | Run 3× to detect flakiness |
+| AI evals | Eval (real model) | `app/evals/cases/*.json`: about 15 cases, combining the 5 unedited example photos with form data. The **expectations come only from the form and the policy** (PRD §12, 2026-11-26):<br>• return 31 / 45 days → REJECTED `R2.3`;<br>• complaint > 2 years → REJECTED `C2.3`;<br>• safety wording in the reason → ESCALATED `R7.1`/`C7.1`;<br>• prompt-injection reason → not ACCEPTED solely because of the injection;<br>• every cited ID ⊆ the applied policy;<br>• Polish reply to an English question (AC-45) | 100% on these assertions. For every photo, the model's `ImageAnalysis` and label are **recorded in the report without pass/fail**, because the README forbids pre-assuming what the model sees | Run 3× to detect flakiness |
 
 ### Technical acceptance criteria
 - TAC-001-01: Only `ResponsesApiGateway` (and the optional fallback) imports `com.openai.*`, enforced by an ArchUnit-style test or a simple classpath scan test.
 - TAC-001-02: No outgoing request body contains `"store":true` or `previous_response_id` (asserted on WireMock request journals).
 - TAC-001-03: Every validated decision's `ruleIds` is a non-empty subset of the applied policy's extracted ID set.
-- TAC-001-04: G1–G5 have 100% branch coverage in unit tests.
+- TAC-001-04: G1–G6, `RuleIdStreamFilter` and the ID-replacement logic have 100% branch coverage in unit tests, measured with JaCoCo, which is configured in the POM.
+- TAC-001-07: No streamed text delivered to the browser contains a rule ID outside `decision.ruleIds` (integration test with a stub whose body cites `R9.9`).
 - TAC-001-05: The SSE output never contains reasoning text, model names or instruction text (integration test with a stub that includes reasoning events).
-- TAC-001-06: All WireMock stubs reference a capture file that records its date, endpoint, model and request without secrets.
+- TAC-001-06: All WireMock stubs reference a capture file that records its date, endpoint, model and request without secrets, or are listed as a documented synthetic exception (D-L1, S-1).

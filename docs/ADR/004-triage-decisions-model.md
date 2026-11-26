@@ -1,7 +1,7 @@
 # ADR-004: Photo Triage with a Decisions Model and a Confidence-Based Fast Path
 
 **Date:** 2026-11-25
-**Status:** Accepted (implementation gated by spike S-2)
+**Status:** Accepted (implementation gated by spike S-2). **The PoC ships `assist` mode only; the fast path is disabled** (D-T2 amendment, 2026-11-26)
 **Relates to:** [`000-main-architecture.md`](000-main-architecture.md), [`001-llm-integration.md`](001-llm-integration.md), [`002-backend.md`](002-backend.md)
 
 ---
@@ -40,7 +40,7 @@ photo + form → [TRIAGE: decisions model] → router ─┬─ fast path → ru
                                                    └─ LLM path → vision LLM (+triage signals) → decision LLM (+signals) → guardrails → streamed message
 ```
 
-- Triage runs **only for the first decision** in `assist` and `fast-path` modes. It also runs for photos added in chat, where it only provides signals (no fast path).
+- Triage runs **only for the first decision** (the form photo), in `assist` and `fast-path` modes. Photos added in chat are **not** triaged; they go only to the vision LLM.
 - Deterministic guardrails (ADR-001 §3.4, G1–G6) apply to **both** paths.
 
 ### 3.2 Components (package `com.hsdc.copilot.triage`)
@@ -48,7 +48,7 @@ photo + form → [TRIAGE: decisions model] → router ─┬─ fast path → ru
 | Component | Responsibility |
 |---|---|
 | `TriageProperties` | `mode` (`off \| assist \| fast-path`, default `assist`), `model` (`LLM_TRIAGE_MODEL`, default `openai/gpt-6-luna-decisions`), `lowConfidence` (default 0.80), `highConfidence` (default 0.95), `safetyProbability` (default 0.30), `timeout` (default 10 s), `baseUrl` (default `https://openrouter.ai/api/alpha/decisions`) |
-| `DecisionsApiClient` | The only class that knows the alpha wire format. It uses Spring `RestClient` with a bearer `OPENROUTER_API_KEY`, the attribution headers and a 10 s timeout, and makes no retries (the budget is too small). It maps HTTP errors and `refusal` answers to `TriageUnavailable` |
+| `DecisionsApiClient` | The only class that knows the alpha wire format. It uses Spring `RestClient` with a bearer `OPENROUTER_API_KEY`, the attribution headers and an 8 s timeout (ADR-001 §3.6 budget), and makes no retries (the budget is too small). It maps HTTP errors and `refusal` answers to `TriageUnavailable` |
 | `TriageQuestionSet` | Builds the questions per case type from `classpath:triage/questions-return.json` and `questions-complaint.json` (versioned files, reviewed like prompts) |
 | `TriageService` | Builds `state` (form facts + photo reference), calls the client and maps the answers to `TriageResult` |
 | `TriageRouter` | Decides `FAST_PATH` or `LLM_PATH` from `TriageResult`, `CaseFacts` and the mode (§3.5) |
@@ -73,6 +73,7 @@ State sent to the model:
 | `likely_cause` | choice | `MANUFACTURING_DEFECT`, `IMPACT`, `LIQUID`, `WEAR`, `UNKNOWN` | AC-17, C3/C4 | COMPLAINT |
 | `safety_hazard` | noul | true: swollen battery, burn marks, smoke, sparks, exposed wiring | AC-26, C7.1 | both |
 | `description_consistent` | noul | true: the photo is consistent with the customer's reason; false: it contradicts it | R6/C8 contradiction | both (only when `reason` is non-empty) |
+| `reason_reports_defect` | noul | true: the customer's reason describes a malfunction or damage; false: it does not (e.g. "zmiana zdania") | R1.1 / AC-28 wrong case type | RETURN (only when `reason` is non-empty; absent counts as false) |
 
 The question texts are English instructions, and they tell the model to ignore any instructions found in the photo or the reason (ADR-001 D-L5).
 
@@ -97,11 +98,11 @@ The router takes the **first** matching row. "All ≥ H" means every listed ques
 | # | Mode | Condition | Route | Result |
 |---|---|---|---|---|
 | T0 | any | `mode=off`, or triage failed or timed out, or `refusal` on any listed question | LLM path, with no signals or partial signals | — |
-| T1 | any | G2/G3 time window exceeded (code, ADR-001) | fast path (in `fast-path` mode) | `REJECTED` with `R2.3` / `C2.3`; message template `window-*.md` (AC-24/25) |
-| T2 | any | `safety_hazard` P(true) ≥ `safetyProbability` (0.30), at any confidence | fast path (in `fast-path` mode) | `ESCALATED`, `safety=true`, `C7.1`/`R6` (AC-26). This rule is deliberately asymmetric: safety never needs high confidence |
+| T1 | any | `safety_hazard` P(true) ≥ `safetyProbability` (0.30), at any confidence, **or** the ADR-001 G1 safety lexicon matches the reason | fast path (in `fast-path` mode). In `assist` mode, ADR-001 G1 enforces the same escalation on the LLM path | `ESCALATED`, `safety=true`, `R7.1` / `C7.1` (AC-26). This rule is deliberately asymmetric: safety never needs high confidence. It is evaluated **before** the time window (PRD §11 precedence) |
+| T2 | any | G2/G3 time window exceeded (code, ADR-001) | fast path (in `fast-path` mode) | `REJECTED` with `R2.3` / `C2.3`; message template `window-*.md` (AC-24/25) |
 | T3 | fast-path | `photo_usable=false`, all ≥ H on `photo_usable` | fast path | `NEEDS_MORE_INFO`; the template names what the photo must show (AC-19) |
 | T4 | fast-path | `device_category` ≠ `formCategory` (or `NOT_A_DEVICE`), all ≥ H on `photo_usable` and `device_category` | fast path | `NEEDS_MORE_INFO`, category-mismatch template (AC-19) |
-| T5 | fast-path | RETURN; `photo_usable=true`, category matches, `damage_visible=false`, `condition ∈ {NEW_UNUSED, LIGHT_SIGNS_OF_USE}`, `safety_hazard=false`, `description_consistent≠false`, all ≥ H; `formCategory ∉ {AUDIO, OTHER}` (R4.1 hygiene seal, R6) | fast path | `ACCEPTED_PRELIMINARY` with `R2.2, R3.1, R5.3` (NEW_UNUSED) or `R2.2, R3.3, R5.3` (LIGHT_SIGNS_OF_USE: the template states that a reduction is possible) |
+| T5 | fast-path | RETURN; `photo_usable=true`, category matches, `damage_visible=false`, `condition ∈ {NEW_UNUSED, LIGHT_SIGNS_OF_USE}`, `safety_hazard=false`, `description_consistent≠false`, `reason_reports_defect=false` (R1.1, AC-28), all ≥ H; `formCategory ∉ {AUDIO, OTHER}` (R4.1 hygiene seal, R6) | fast path | `ACCEPTED_PRELIMINARY` with `R2.2, R3.1, R5.3` (NEW_UNUSED) or `R2.2, R3.3, R5.3` (LIGHT_SIGNS_OF_USE: the template states that a reduction is possible) |
 | T6 | any | Any decision-relevant question with confidence < `lowConfidence` (0.80) | LLM path, signals marked `LOW` | — |
 | T7 | any | Everything else, including all **rejections by condition/cause** and all **complaint acceptances or rejections** | LLM path | — |
 
@@ -122,7 +123,20 @@ The message has the same segments as LLM messages (ADR-001 §3.5): safety block,
 | `safety.md` | Escalation explanation (the safety block itself is the fixed UI segment) |
 
 - **Delivery:** the backend sends the rendered body as a few `delta` events. The SSE contract (ADR-002 §5) is unchanged, and the UI cannot tell which path was used.
-- **Chat continuity:** chat replies after a fast-path start always use the LLM. Its context contains the triage result as the analysis, plus the templated first message in the history.
+- **Chat continuity:** chat replies after a fast-path start always use the LLM. Because guardrails G1, G4 and G5 read `ImageAnalysis`, the fast path stores a **derived `ImageAnalysis`** in `analyses`, mapped from the triage answers:
+
+  | `ImageAnalysis` field | Mapped from |
+  |---|---|
+  | `photoUsable` | `photo_usable` |
+  | `matchesCategory` | `device_category = formCategory` |
+  | `damageVisible` | `damage_visible` |
+  | `signsOfUse` | `condition ≠ NEW_UNUSED` |
+  | `likelyCause`, `causeConfidence` | `likely_cause` and its band (HIGH/MEDIUM/LOW) |
+  | `safetyHazard` | `safety_hazard` P ≥ threshold |
+  | `summaryPl` | the template's "Co widzimy na zdjęciu" text |
+  | `source` | `TRIAGE` (a new field; `LLM` otherwise) |
+
+  The templated first message goes into the history.
 
 ---
 
@@ -162,7 +176,7 @@ The message has the same segments as LLM messages (ADR-001 §3.5): safety block,
 | `DecisionsApiClient.ask(model, state, assets, questions, timeout)` | JSON state, JPEG bytes, question set | Raw answers + usage | `TriageUnavailable` (any non-2xx, timeout or malformed body). **Never surfaced to the customer:** the router falls back to the LLM path (T0) |
 | `TriageService.triage(caseType, form, facts, jpeg)` | — | `TriageResult` | Never throws; returns `status=UNAVAILABLE` |
 | `TriageRouter.route(result, facts, mode)` | — | `RouteDecision` | — |
-| SSE | — | Unchanged. In fast-path mode, `progress(ANALYZING_PHOTO)` covers triage, `PREPARING_DECISION` is still emitted, then `decision`, `delta`×n and `done` | — |
+| SSE | — | Unchanged. In fast-path mode the same sequence as ADR-002 §5 is emitted: `case`, `progress(UPLOAD_RECEIVED)`, `progress(ANALYZING_PHOTO)` (covers triage), `progress(PREPARING_DECISION)`, `decision`, `progress(WRITING_REPLY)`, `delta`×n, `done` | — |
 
 **New environment variables** (to be added to ADR-000 §7 and `.env.example`):
 
@@ -187,9 +201,9 @@ The message has the same segments as LLM messages (ADR-001 §3.5): safety block,
 - OpenRouter offers an alpha Decisions API that returns per-option probabilities and a confidence score instead of text. The slug `openai/gpt-6-luna-decisions` is listed, but it is undocumented.
 **Decision:**
 - Implement `triage` as described in this ADR.
-- **Spike S-2** must run before any production triage code. It uses the synthetic photos in `assets/example-images/` and the WireMock capture procedure from AGENTS.md, and checks the following:
+- **Spike S-2** must run before any production triage code. It uses the unedited example photos in `assets/example-images/` (no description of their content in `state`) and the capture procedure from AGENTS.md, and checks the following:
   - (a) `POST /api/alpha/decisions` with `model=openai/gpt-6-luna-decisions` returns 200.
-  - (b) A JPEG asset and the four question types used here (`noul`, `choice`, `score`) are accepted.
+  - (b) A JPEG asset and the three question types used here (`noul`, `choice`, `score`) are accepted.
   - (c) The `answers[*].confidence` and `probabilities` shapes are as documented.
   - (d) Latency and `usage.cost` per case are recorded.
 - Capture the responses verbatim to `app/backend/src/test/resources/openrouter-captures/decisions-*.json`.
@@ -199,7 +213,7 @@ The message has the same segments as LLM messages (ADR-001 §3.5): safety block,
 - Using logprobs from the LLM: logprob support for `gpt-6-luna` is not documented on its OpenRouter page.
 **Consequences:**
 - (+) A potentially large cost and latency reduction for clear-cut returns, and explicit uncertainty signals for the LLM.
-- (−) An extra network call on the LLM path, with a 10 s budget inside the 55 s deadline.
+- (−) An extra network call on the LLM path, with an 8 s budget inside the 55 s deadline (ADR-001 §3.6).
 - (−) Dependency on an **alpha** API whose shape may change. This is isolated in `DecisionsApiClient`, with contract tests driven by the captures.
 **Review trigger:**
 - S-2 fails.
@@ -207,7 +221,13 @@ The message has the same segments as LLM messages (ADR-001 §3.5): safety block,
 - The triage call's p95 latency exceeds 5 s.
 
 ### D-T2 Thresholds: 0.80 low, 0.95 high, asymmetric safety; calibrate with evals before enabling the fast path
-**Status:** Accepted · **Date:** 2026-11-25
+**Status:** Accepted · **Date:** 2026-11-25, amended 2026-11-26
+
+> **Amendment 2026-11-26 (product owner, PRD §12):**
+> - `assets/example-images/README.md` allows only the 5 real, unedited example photos. It forbids generating images and pre-assuming what the model sees.
+> - The precision criteria below therefore **cannot be met in the PoC**, so `fast-path` mode stays disabled.
+> - The PoC ships `assist` mode. The agreement log and the eval report record triage answers and LLM labels without pass/fail.
+> - Enabling the fast path requires an approved, separately curated eval photo set (future work).
 **Context:**
 - The product owner proposed 80% as the "low" boundary.
 - Whether the model's `confidence` is **calibrated** (i.e. 0.95 means right about 95% of the time) is not documented for Luna. OpenRouter's catalogue claims calibration only for the Baseten decision models.
@@ -234,8 +254,8 @@ The message has the same segments as LLM messages (ADR-001 §3.5): safety block,
 - The fast path may produce:
   - return acceptances (T5);
   - photo/category "needs more info" (T3/T4);
-  - time-window rejections (T1, which are code-determined anyway);
-  - safety escalations (T2).
+  - time-window rejections (T2, which are code-determined anyway);
+  - safety escalations (T1).
 - It may **not** produce merit-based rejections or any complaint acceptance or rejection.
 - Its first message is rendered from reviewed Polish templates with fixed rule IDs (validated at startup). The PRD format (AC-22, AC-23) is therefore guaranteed with no LLM.
 **Rejected alternatives:**
@@ -330,23 +350,27 @@ sequenceDiagram
 | Wire mapping | Unit | Captured S-2 responses | `TriageResult` with correct values, bands and cost | `refusal` answer → `refused=true`; unknown answer `type` → `UNAVAILABLE` |
 | Request building | Unit | RETURN and COMPLAINT forms | Question set per type; JPEG asset base64 **without** a `data:` prefix; the asset is referenced in `state` | Empty reason → no `description_consistent` question |
 | Router table | Unit (parameterized) | Synthetic `TriageResult` grid across thresholds | Exactly the T-rule in §3.5 | Confidence exactly 0.80 and 0.95 (inclusive bounds); AUDIO/OTHER never T5; complaint never T5 |
-| Safety asymmetry | Unit | `safety_hazard` P=0.31, confidence 0.40 | T2 escalation | P=0.29 → no T2 |
+| Safety asymmetry | Unit | `safety_hazard` P=0.31, confidence 0.40 | T1 escalation | P=0.29 → no T1 |
+| Defect in a return reason | Unit | RETURN, all answers HIGH, `reason_reports_defect=true` | Not T5 → LLM path (T7) | Empty reason → T5 allowed |
 | Mode behavior | Unit | Same input in `off`, `assist`, `fast-path` | `off`: no triage call; `assist`: LLM path + agreement log line; `fast-path`: no LLM call | — |
-| Fallback | Integration (WireMock) | Decisions endpoint returns 502 / 524 / times out after 10 s | LLM path used; customer sees a normal decision; no error event | Deadline still met |
+| Fallback | Integration (WireMock) | Decisions endpoint returns 502 / 524 / times out after 8 s | LLM path used; customer sees a normal decision; no error event | Deadline still met |
+| Safety precedence | Unit | RETURN 45 days old, triage `safety_hazard` P=0.6 | T1 → ESCALATED `R7.1`, not REJECTED | Same in `assist` mode via ADR-001 G1 |
+| Derived analysis | Unit | Fast-path result | `analyses` gets a `source=TRIAGE` `ImageAnalysis` with the mapped fields | — |
 | Templates | Unit | Every template × every rule | All AC-22 sections present; rule IDs ⊆ policy IDs; for light use, the reduction sentence is present (R3.3); no unreplaced placeholders | — |
 | SSE parity | Integration | Fast path vs LLM path | Identical event sequence shape (TAC-002-04) | — |
 | No LLM on the fast path | Integration | `fast-path` mode, all-high stub | Zero requests to `/responses` in the WireMock journal | — |
-| Triage eval | Eval (real model) | The ADR-001 eval set extended to ≥ 40 synthetic cases, with expected triage answers and labels | Report per question: accuracy by confidence band (reliability table) and per-rule fast-path precision; agreement with the LLM label | Run 3× for stability |
+| Triage record (PoC) | Eval (real model) | The ADR-001 eval cases, i.e. the 5 unedited example photos with form data | Report per case: the triage answers with their confidence, the would-be T-rule, and the LLM label. **No pass/fail on photo content**, per PRD §12 (2026-11-26) | Run 3× to show stability of the answers |
+| Fast-path precision (future) | Eval | An approved, curated eval photo set with expected answers | Per-rule precision as in D-T2 | Not run in the PoC |
 
 ### Technical acceptance criteria
 - TAC-004-01: With `TRIAGE_MODE=off`, behavior and outgoing requests are identical to ADR-001 (no call to `/api/alpha/decisions`).
-- TAC-004-02: Any triage failure adds at most 10 s and never produces a customer-visible error.
+- TAC-004-02: Any triage failure adds at most 8 s and never produces a customer-visible error.
 - TAC-004-03: In `fast-path` mode, a case routed by T1–T5 makes zero LLM calls before `done`, and its first message passes the same AC-22/AC-23 checks as LLM messages.
-- TAC-004-04: No fast-path decision is `REJECTED` unless it was produced by T1 (time window).
-- TAC-004-05: The eval report prints, for each fast-path rule, its precision and count at the configured `TRIAGE_HIGH_CONFIDENCE`. `fast-path` mode may be enabled only when D-T2's criteria are met, and the run is recorded in this ADR.
+- TAC-004-04: No fast-path decision is `REJECTED` unless it was produced by T2 (time window).
+- TAC-004-05: The PoC eval report lists every case's triage answers, its would-be T-rule and the LLM label. `fast-path` mode may be enabled only after a future curated eval set meets D-T2's criteria and that run is recorded in this ADR.
 - TAC-004-06: `DecisionsApiClient` is the only class referencing `/api/alpha/decisions`, and all its tests use captured responses.
 
 ### Open questions
 - **Q-T1:** Does `openai/gpt-6-luna-decisions` exist on the Decisions endpoint with image input? Spike S-2 answers this. If not, which decisions-modality model should be used?
 - **Q-T2:** Should fast-path acceptance also require `protective_film_visible=true` for categories that ship with film (R3.1)? The current rule does not require it, because a single photo often cannot show it, and the decision is preliminary (R5.3).
-- **Q-T3:** Is 98% the right precision target for switching the fast path on?
+- **Q-T3:** Is 98% the right precision target for switching the fast path on? This is moot in the PoC, because the fast path is disabled (D-T2 amendment).

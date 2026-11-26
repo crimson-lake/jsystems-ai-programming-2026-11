@@ -45,14 +45,15 @@
 
 | Step | Command | Note |
 |---|---|---|
-| JDK 25 | `sudo apt install openjdk-25-jdk` (version 25.0.5 in Ubuntu updates) | Alternative without sudo: SDKMAN (`curl -s "https://get.sdkman.io" \| bash`, then `sdk install java <25.x-tem>`; take the exact identifier from `sdk list java`) |
-| Maven | **Not installed system-wide.** The generated project contains the Maven Wrapper (`mvnw`), which downloads the pinned Maven 3.10.x into `~/.m2` | Maven 4 is still RC (4.0.0-rc-7), so do not use it |
+| JDK 25 | **Installed on the course VM (2026-11-26):** `openjdk 25.0.5.1` (Ubuntu `openjdk-25-jdk`) | On another machine: `sudo apt install openjdk-25-jdk`, or SDKMAN (`sdk install java <25.x-tem>`) |
+| Spring Boot CLI | **Installed:** v4.1.0 at `~/.sdkman/candidates/springboot/current/bin/spring` (not on `PATH`; agents call it by full path) | It is the project generator (§3.2) |
+| Maven | **Not installed system-wide.** The generated project contains the Maven Wrapper (`mvnw`), which downloads the pinned Maven 3 version into `~/.m2` | The exact version comes from `.mvn/wrapper/maven-wrapper.properties`. Maven 4 is still RC (4.0.0-rc-7), so do not use it. If `mvnw` is not executable after generation, run it as `sh mvnw …`, because `chmod` is denied for agents |
 | Node | Node 24 is already on the VM and is used for `ng` during development | The Maven build downloads its own Node with frontend-maven-plugin, so CI builds do not depend on the system Node |
-| Verify | `java -version` shows 25, and `./mvnw -v` shows Maven 3.10.x on Java 25 | Record the output in the scaffolding task summary |
+| Verify | `java -version` shows 25, and `./mvnw -v` shows Maven 3.x on Java 25 | Record the output in the scaffolding task summary |
 
-### 3.2 Project initialization (Spring Initializr)
+### 3.2 Project initialization (Spring Initializr via Spring Boot CLI, Maven)
 
-Generate into `app/backend` from the repository root with the Initializr HTTP API:
+Generate into `app/backend` from the repository root with the **Spring Boot CLI** (`spring init`). It calls the Initializr service with these parameters:
 
 | Parameter | Value | Reason |
 |---|---|---|
@@ -64,11 +65,22 @@ Generate into `app/backend` from the repository root with the Initializr HTTP AP
 | `packageName` | `com.hsdc.copilot` | — |
 | `packaging` | `jar` | One runnable JAR (D-01) |
 | `dependencies` | `web,validation,actuator,configuration-processor,devtools,cache` | `web` = Spring Web (MVC). In Boot 4 this yields `spring-boot-starter-webmvc` + `spring-boot-starter-webmvc-test`; check the generated POM, and if it shows the deprecated `spring-boot-starter-web`, replace it with `spring-boot-starter-webmvc` |
-| `baseDir` | `backend` | Unzipped into `app/` |
+| location | `app/backend` | Extracted directly into the target folder |
 
-Example command, run from `app/`:
-`curl https://start.spring.io/starter.zip -d type=maven-project -d language=java -d bootVersion=4.2.0 -d javaVersion=25 -d groupId=com.hsdc -d artifactId=copilot -d name=copilot -d packageName=com.hsdc.copilot -d dependencies=web,validation,actuator,configuration-processor,devtools,cache -d baseDir=backend -o backend.zip`
-Then unzip `backend.zip` and delete it.
+**Command,** run from the repository root:
+`~/.sdkman/candidates/springboot/current/bin/spring init --build=maven --type=maven-project -l java -b 4.2.0 -j 25 -g com.hsdc -a copilot -n copilot --package-name com.hsdc.copilot --packaging jar -d web,validation,actuator,configuration-processor,devtools,cache app/backend`
+
+**Required flags:**
+- **`--build=maven` is mandatory,** because `spring init` defaults to Gradle.
+- `-b` and `-j` must be explicit.
+
+**Equivalent without the CLI** (for humans; `curl` is denied for agents):
+`curl https://start.spring.io/starter.zip -d type=maven-project … -o backend.zip`, with the same parameters.
+
+**After generation:**
+1. Check that `pom.xml`, `mvnw` and `.mvn/wrapper/` exist and that there is no `build.gradle`.
+2. Move the single generated property (`spring.application.name`) from `src/main/resources/application.properties` into `application.yml` (§3.9), then remove `application.properties` with `git rm` after its first commit, or ask the human to delete it. A leftover `.properties` file would take precedence over the YAML.
+3. Delete `HELP.md` in the same way.
 
 Dependencies added by hand to the generated POM (versions pinned in `<properties>`):
 
@@ -77,6 +89,23 @@ Dependencies added by hand to the generated POM (versions pinned in `<properties
 | `com.openai:openai-java:4.113.0` | compile | LLM client (ADR-001) |
 | `com.github.ben-manes.caffeine:caffeine` (Boot-managed version) | compile | Case store |
 | `org.wiremock.integrations:wiremock-spring-boot:4.4.3` | test | OpenRouter stub. Boot 4 compatibility is unverified, so check it in the first integration test. If it is incompatible, use plain `org.wiremock:wiremock:3.13.2` with a `@DynamicPropertySource` base URL |
+
+**Build plugins configured by hand in the POM** (T10 of the plan):
+
+| Plugin | Configuration | Why |
+|---|---|---|
+| `maven-surefire-plugin` (Boot-managed) | Runs `*Test` classes. `<excludedGroups>${test.excludedGroups}</excludedGroups>`, with the property defaulting to `capture,eval` | Unit tests. The tagged real-API tests are excluded by default, and the exclusion can be cleared from the command line |
+| `maven-failsafe-plugin` (Boot-managed, **must be declared** in `<build><plugins>` with the `integration-test` and `verify` goals) | Runs `*IT` classes, with the same `excludedGroups` property | Without this declaration, `*IT` classes are silently never run, and a run with zero tests looks green |
+| `jacoco-maven-plugin` | `prepare-agent` + `report`; coverage check on the `decision` package (TAC-001-04) | Branch-coverage requirement |
+| `frontend-maven-plugin`, `maven-resources-plugin` | §3.8 | Angular build and policies |
+
+**Commands:**
+
+| Purpose | Command |
+|---|---|
+| Unit tests only | `./mvnw -Pno-frontend test` |
+| Unit + integration tests | `./mvnw -Pno-frontend verify` |
+| Real-API tests | `./mvnw -Pno-frontend verify -Dtest.excludedGroups= -Dgroups=eval` (or `=capture`) |
 
 Boot 4 points the implementing agent must respect (from the 4.0 migration guide and the 4.2 release notes):
 - **Jackson:** Jackson 3 is the default JSON library, with packages under `tools.jackson.*` (except `jackson-annotations`). Do not add Jackson 2.
@@ -102,16 +131,25 @@ Boot 4 points the implementing agent must respect (from the 4.0 migration guide 
 1. Acquire the case's `ReentrantLock` with `tryLock()`. If it is busy, return **409** so that two concurrent turns cannot interleave history.
 2. Build a **working copy** of the turn: user message, new analysis and incremented photo counter.
 3. Run the pipeline (ADR-001) and emit `progress`, then `decision`, then `delta` events.
-4. On success, **commit atomically**: append the user message, analysis and assistant message, set `currentDecision` and `additionalPhotoCount`, then emit `done`. On any error, discard the working copy (AC-41: a retry is a clean re-run) and emit `error`.
+4. On success, **commit atomically**: append the user message, analysis and assistant message, set `currentDecision` and `additionalPhotoCount`, re-`put` the session into the store, and then emit `done`.
+   - A client disconnect **after** the commit is not rolled back. The turn is complete, and a retry replays it (below).
+   - On any error **before** the commit, discard the working copy (AC-41: a retry is a clean re-run) and emit `error`.
 5. Release the lock.
 
-**Idempotency:** `clientMessageId` is stored with each committed user message. A repeated `clientMessageId` that is already committed returns **409 `DUPLICATE_MESSAGE`**, which protects against double-submit races.
+**Idempotency and replay:**
+- `clientMessageId` is stored with each committed user message.
+- A repeated `clientMessageId` that is **already committed** returns `200 text/event-stream` and **replays** the committed turn: `decision` (from its snapshot), one `delta` with the full assistant text, then `done`. No AI call is made.
+- This covers a client that lost the stream before `done`, and it keeps AC-41's "Spróbuj ponownie" idempotent.
+- A repeated ID whose turn is **still running** returns 409 `CASE_BUSY`.
+
+**Chat-turn deadline:** the same 55 s budget to the `decision` event as the first submission (ADR-001 §3.6).
 
 **First submission:** `POST /api/cases` creates the session in the store **only on success**. A failed first decision leaves no orphan case, and the client retries with the same data (AC-40).
 
 **Store:**
 - Caffeine `Cache<UUID, CaseSession>` with `expireAfterAccess(CASE_TTL_MINUTES)` (default 60) and `maximumSize(500)`. It is used directly, not through `@Cacheable`, which is meant for memoizing method results.
-- Eviction while a stream is running is prevented, because every event write touches the entry.
+- During a turn, `CaseService` holds a strong reference to the `CaseSession`, and the commit re-`put`s it. An eviction by size or TTL during a long turn therefore cannot lose the committed result.
+- A case evicted **between** turns is gone: 404, and the UI offers "Nowa sprawa".
 
 **Threads:**
 - `spring.threads.virtual.enabled=true`.
@@ -126,14 +164,17 @@ Boot 4 points the implementing agent must respect (from the 4.0 migration guide 
   - `spring.mvc.async.request-timeout=125s`.
   - Response headers: `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `X-Accel-Buffering: no`.
   - `server.compression.enabled=false`, because compression would buffer the stream.
-- **Events:** every event is sent with `SseEmitter.event().name(type).data(json)`. The `data` is serialized with the Jackson 3 `JsonMapper`. Event names and payloads are exactly those in ADR-000 §6.
+- **Events:** every event is sent with `SseEmitter.event().name(type).data(json)`. The `data` is serialized with the Jackson 3 `JsonMapper`. Event names follow ADR-000 §6; **payload fields are defined in §4 of this ADR, which is authoritative.**
 - **Heartbeat:** an SSE comment `ping` every 10 s. When a send throws `IOException` or `onError`/`onTimeout` fires, the writer marks the turn **cancelled**. It then cancels the LLM stream (ADR-001 §3.6), rolls back the working copy and completes the emitter.
-- **Ordering:** `case` (first submission only), then `progress`, then exactly one `decision`, then any number of `delta`, then exactly one of `done` or `error`. After `error` the emitter is completed normally (`complete()`, not `completeWithError`), so the browser always receives the error event.
+- **Ordering:**
+  - `case` (first submission only), then one or more `progress`.
+  - Then **either** `error`, **or** exactly one `decision`, `progress(WRITING_REPLY)`, any number of `delta`, and exactly one of `done` or `error`.
+  - After `error` the emitter is completed normally (`complete()`, not `completeWithError`), so the browser always receives the error event.
 - **Pre-stream failures:** validation failures detected **before** the stream starts (bad form, bad photo, unknown case, busy, limit) return normal JSON errors with an HTTP status. No emitter is opened.
 
 ### 3.6 Request validation
 
-Server validation mirrors the client rules (the client is never trusted). It uses Jakarta Bean Validation on `CaseForm` plus custom validators. The message texts are in Polish and identical to the PRD texts.
+Server validation mirrors the client rules (the client is never trusted). It uses Jakarta Bean Validation on `CaseForm` plus custom validators. The message texts are in Polish and identical to the PRD texts. Where the PRD gives no text, the texts come from the single string table in **ADR-003 §3.7**, keyed by the codes below. The backend keeps them in `ValidationMessages_pl.properties`, and a unit test checks that they match the frontend table.
 
 | Field | Rule | Error code / message |
 |---|---|---|
@@ -155,10 +196,10 @@ Multipart limits: `spring.servlet.multipart.max-file-size=10MB` and `max-request
 | Exception | HTTP status and body |
 |---|---|
 | Validation errors | 400 `{code:"VALIDATION", fieldErrors:[{field, message}]}` |
-| Upload too large | 413 |
+| Upload too large | 413 `{code:"PAYLOAD_TOO_LARGE", message:"Zdjęcie przekracza limit 10 MB"}` |
 | Unknown or expired case | 404 `{code:"CASE_NOT_FOUND"}` |
 | Busy | 409 `{code:"CASE_BUSY"}` |
-| Duplicate message | 409 `{code:"DUPLICATE_MESSAGE"}` |
+| Already committed `clientMessageId` | Not an error: the turn is replayed as a stream (§3.4) |
 | Photo limit | 422 `{code:"PHOTO_LIMIT"}` |
 | Anything else | 500 `{code:"INTERNAL", message:"Wystąpił błąd. Spróbuj ponownie."}` |
 
@@ -187,7 +228,7 @@ The Angular output folder `dist/<project>/browser` is the `@angular/build:applic
   - the last path segment contains no `.` (so `.js`, `.css`, `.png` and `.ico` still go to the static resource handler);
   - `Accept` includes `text/html`.
 - Static files are served by Boot's default `classpath:/static` handler.
-- Verify the handler order with a test: `GET /main-abc.js` returns JS, and `GET /chat` returns `index.html`.
+- Verify the handler order with a test: `GET /main-abc.js` returns JS, and `GET /sprawa` returns `index.html`.
 
 **Development:**
 - Run `./mvnw spring-boot:run -Pno-frontend` (port 8080) together with `ng serve` (port 4200, proxy `/api` → 8080, ADR-003).
@@ -197,7 +238,8 @@ The Angular output folder `dist/<project>/browser` is the `@angular/build:applic
 
 | Key | Value / source |
 |---|---|
-| `spring.config.import` | `optional:file:.env[.properties]` (loads `app/backend/.env` locally; gitignored) |
+| `spring.config.import` | `optional:file:.env[.properties],optional:file:../../.env[.properties]`, which loads the single repository-root `.env` whether the app starts from the root (`java -jar`) or from `app/backend` (`./mvnw`). See ADR-000 §7 |
+| `spring.profiles` (tests) | Integration tests run with `@ActiveProfiles("test")`, which uses `src/test/resources/application-test.yml`: dummy `openrouter.api-key`, `LLM_MODEL` values, `triage.mode=assist`, and **both** `openrouter.base-url` and `triage.base-url` pointing at WireMock. Tests never read `.env` |
 | `spring.threads.virtual.enabled` | `true` |
 | `spring.mvc.async.request-timeout` | `125s` |
 | `spring.servlet.multipart.max-file-size` / `max-request-size` | `10MB` / `11MB` |
@@ -220,10 +262,10 @@ The Angular output folder `dist/<project>/browser` is the `@angular/build:applic
 | Type | Fields | Notes |
 |---|---|---|
 | `CaseForm` (request part `form`, JSON) | `caseType`, `category`, `model`, `purchaseDate` (`YYYY-MM-DD`), `reason` | §3.6 |
-| `CaseSession` | `id`, `form`, `analyses`, `messages`, `currentDecision`, `additionalPhotoCount`, `committedClientMessageIds`, `lock`, `createdAt` | Mutable; accessed only under `lock` |
+| `CaseSession` | `caseId`, `form`, `triage` (optional `TriageResult`, ADR-004), `analyses`, `messages`, `currentDecision`, `additionalPhotoCount`, `committedClientMessageIds`, `lock`, `createdAt` | Mutable; accessed only under `lock` |
 | `ChatMessage` | `id`, `role`, `text`, `clientMessageId` (user only), `hasPhoto`, `analysisIndex`, `decisionSnapshot`, `changed`, `previousLabel`, `createdAt` | — |
 | `TurnInput` | `text`, `photoJpeg` (bytes or null), `clientMessageId` | Photo bytes live only for the duration of the turn |
-| `ApiError` | `code`, `message?`, `fieldErrors?` | §3.7 |
+| `ApiError` | `code` (`VALIDATION \| CASE_NOT_FOUND \| CASE_BUSY \| PHOTO_LIMIT \| PAYLOAD_TOO_LARGE \| INTERNAL`), `message?`, `fieldErrors?` (`[{field, message}]`, with messages equal to the texts in ADR-003 §3.7) | §3.7. The frontend maps each code to UI behavior (ADR-003 §3.7) |
 | SSE payloads | `CaseCreated{caseId}`, `Progress{step}`, `DecisionEvent{label, previousLabel, changed, changeReasonPl, safety, suggestOtherCaseType, ruleIds}`, `Delta{text}`, `Done{messageId}`, `StreamError{code, message}` | The JSON field names are the contract with ADR-003 |
 
 ---
@@ -240,7 +282,8 @@ The Angular output folder `dist/<project>/browser` is the `@angular/build:applic
 ### `POST /api/cases/{caseId}/messages`
 - **Request:** `multipart/form-data` with `clientMessageId` (UUID, required), `text` (string, optional when a photo is attached) and `photo` (optional).
 - **Success:** `200 text/event-stream` with `progress(ANALYZING_PHOTO)` (if a photo is attached), `progress(PREPARING_DECISION)`, `decision`, `progress(WRITING_REPLY)`, `delta`×n, `done`.
-- **Pre-stream errors:** 400, 404, 409 (`CASE_BUSY` or `DUPLICATE_MESSAGE`), 413, 422 `PHOTO_LIMIT`.
+- **Replay:** an already committed `clientMessageId` streams `decision`, one `delta` and `done` from the stored turn (§3.4).
+- **Pre-stream errors:** 400, 404 `CASE_NOT_FOUND`, 409 `CASE_BUSY`, 413, 422 `PHOTO_LIMIT`.
 - **In-stream errors:** `error`, after which nothing is committed.
 
 ### `DELETE /api/cases/{caseId}`
@@ -253,12 +296,11 @@ The Angular output folder `dist/<project>/browser` is the `@angular/build:applic
 
 ## 6. Technical Decisions
 
-### D-B1 Initialize with the Spring Initializr HTTP API and the Maven Wrapper; no system Maven
-**Status:** Accepted · **Date:** 2026-11-25
-**Context:** The course VM has no JDK or Maven installed. Scaffolding must be reproducible by an agent from the shell.
+### D-B1 Initialize with Spring Initializr (via Spring Boot CLI) as a Maven project with the Maven Wrapper; no system Maven
+**Status:** Accepted · **Date:** 2026-11-25, amended 2026-11-26 (product owner: Maven; generator: Spring CLI)
+**Context:** The course VM has JDK 25 and Spring Boot CLI 4.1.0 but no system Maven. `curl` is denied for agents. Scaffolding must be reproducible by an agent from the shell.
 **Decision:**
-- Install only JDK 25.
-- Generate the project with `curl https://start.spring.io/starter.zip` and the parameters in §3.2.
+- Generate the project with `spring init --build=maven` and the parameters in §3.2. The `curl` form is documented for humans only.
 - Use `./mvnw` for every build command.
 **Rejected alternatives:**
 - An IDE wizard: not reproducible from an agent shell.
@@ -285,7 +327,9 @@ The Angular output folder `dist/<project>/browser` is the `@angular/build:applic
 
 ### D-B3 Server-authoritative turn with atomic commit and per-case lock
 **Status:** Accepted · **Date:** 2026-11-25
-**Decision:** §3.4. A turn is applied to the case only after `done`. A per-case lock and `clientMessageId` prevent interleaving and duplicates.
+**Decision:** §3.4.
+- A turn is committed just before `done` is emitted, and only on success.
+- A per-case lock and `clientMessageId` replay prevent interleaving and duplicates.
 **Rejected alternatives:**
 - Appending the user message before calling AI: a failed reply would leave a half-turn, and the retry would duplicate the message.
 **Consequences:**
@@ -421,21 +465,27 @@ sequenceDiagram
 | Case store TTL | Unit | Fake ticker in Caffeine | Evicted after 60 min idle, kept on access | 501st case evicts the LRU |
 | Atomic commit | Unit | Pipeline fails at the decision or mid-stream | No change to `messages`, `analyses` or `photoCount` | Failure after 50 deltas |
 | Lock | Unit/integration | Two concurrent POSTs for the same case | One streams; the other gets 409 `CASE_BUSY` | Lock released after an error |
-| Idempotency | Integration | Same `clientMessageId` after a commit | 409 `DUPLICATE_MESSAGE` | Same ID after a failure → processed |
+| Idempotency | Integration | Same `clientMessageId` after a commit | 200 stream replaying `decision`, one `delta`, `done`; no AI request in the WireMock journal | Same ID after a failure → processed normally; same ID while running → 409 `CASE_BUSY` |
 | Photo limit | Integration | 4th chat photo | 422 `PHOTO_LIMIT` | Failed turn does not increment |
 | SSE contract | Integration (WireMock stubs from S-1 captures) | `POST /api/cases` happy path | Event names and order exactly as in §5; JSON payloads match | Stub `response.failed` → `error` last, no case created |
 | Timeout | Integration | WireMock delay > budget (budget shortened via a test property) | `error{TIMEOUT}` | Delay only in streaming |
 | Error hygiene | Integration | Force a 500 inside a service | Body has `code` + Polish message, no stack trace or class names | Validation error bodies |
-| SPA fallback | Integration | `GET /`, `/chat`, `/main-x.js`, `/api/unknown` | index.html, index.html, JS, 404 JSON | `/actuator/health` |
+| SPA fallback | Integration | `GET /`, `/sprawa`, `/main-x.js`, `/api/unknown` | index.html, index.html, JS, 404 JSON | `/actuator/health` |
 | Policies on classpath | Integration | Context start | Both policies loaded, ID sets non-empty | Missing file → startup failure (separate test) |
 | Startup | Smoke | `java -jar` of the packaged JAR | Health UP within 15 s | Missing `OPENROUTER_API_KEY` → fail fast with a clear message |
 
-Integration tests use `@SpringBootTest` + `@AutoConfigureMockMvc` with `MockMvcTester` (which waits for async results; use `.asyncRequestTimeout(...)`). WireMock is injected through `@EnableWireMock` with `baseUrlProperties = "openrouter.base-url"`.
+**How integration tests are set up:**
+- They are `*IT` classes run by Failsafe, using `@SpringBootTest` + `@AutoConfigureMockMvc` + `@ActiveProfiles("test")` with `MockMvcTester`. `MockMvcTester` waits for async results; use `.asyncRequestTimeout(...)`.
+- **WireMock** serves both external endpoints:
+  - `openrouter.base-url`: its value must include the `/api/v1` prefix, so that `/api/v1/responses` stubs match;
+  - `triage.base-url`: `…/api/alpha/decisions`.
+- The annotation shape is believed to be `@EnableWireMock(@ConfigureWireMock(name = …, baseUrlProperties = {…}))`. It is **unverified**, so check it against the wiremock-spring-boot docs in the first IT, and fall back to `@DynamicPropertySource` (§3.2).
 
 ### Technical acceptance criteria
 - TAC-002-01: `./mvnw -v` and `java -version` report Java 25. The POM declares `java.version=25` and Boot `4.2.0`.
 - TAC-002-02: The POM contains no `spring-boot-starter-web` (deprecated) and no Jackson 2 `com.fasterxml.jackson.core:jackson-databind` dependency.
 - TAC-002-03: `./mvnw -Pno-frontend test` runs backend tests without Node. `./mvnw package` produces a JAR containing `static/index.html` and `policies/*.md`.
-- TAC-002-04: For every streaming response, the event sequence matches the regular expression `case? progress+ decision progress? delta* (done|error)` (asserted in integration tests).
-- TAC-002-05: After any `error` event or client disconnect, the case state equals its state before the request (asserted by snapshot comparison).
+- TAC-002-04: For every streaming response, the event sequence matches the regular expression `case? progress+ (error | decision progress? delta* (done|error))` (asserted in integration tests). A replay matches `decision delta done`.
+- TAC-002-05: After any `error` event, or a client disconnect **before the commit**, the case state equals its state before the request (asserted by snapshot comparison). A disconnect after the commit leaves the committed turn in place.
+- TAC-002-07: Surefire and Failsafe each report a **non-zero** number of executed tests, and the `capture`/`eval` tags are not executed by `./mvnw verify` without overrides.
 - TAC-002-06: No response header or body exposes the server or framework version, a stack trace or the API key.

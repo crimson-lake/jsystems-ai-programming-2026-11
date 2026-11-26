@@ -50,12 +50,13 @@ Run these from the repository root, with Node 24 and npm 11 (already on the VM):
 |---|---|---|
 | 1 | `npx @angular/cli@22 new frontend --directory app/frontend --style=scss --routing --ssr=false --zoneless --skip-git --package-manager=npm --ai-config=none` | Standalone (default), strict (default), **zoneless** (default since v21, passed explicitly), Vitest test runner (default), no SSR, no nested git repo. `--ai-config=none` because the repository already has `AGENTS.md`/`CLAUDE.md` |
 | 2 | `cd app/frontend && npx ng add @angular/material` | Choose a **custom theme** and **no Roboto** typography (Montserrat replaces it, §3.2). The schematic adds Material Symbols and global body styles |
-| 3 | `npx ng add @angular/material-date-fns-adapter` and `npm i date-fns` | Date adapter for the `pl` locale |
+| 3 | `npm i @angular/material-date-fns-adapter date-fns` | Date adapter for the `pl` locale (no `ng add` schematic is assumed) |
 | 4 | `npm i marked dompurify eventsource-parser` | Markdown, sanitizing, SSE parsing |
 | 5 | `npx ng generate @angular/material:theme-color` | Generate the M3 palettes from primary `#001D4C` and tertiary `#FF9700` into `src/_theme-colors.scss` |
 | 6 | Create `src/proxy.conf.json` mapping `/api/**` to `http://localhost:8080` (`secure: false`), referenced from `angular.json` → `serve.options.proxyConfig` | Same-origin API in development (D-01) |
 | 7 | Set `angular.json` → `build.options.outputPath` to `dist/frontend` (keeps the default `browser` subfolder) | The Maven build copies `dist/frontend/browser` (ADR-002 §3.8) |
-| 8 | Add `public/favicon.ico` and `public/logo.webp` from `assets/` | Brand assets |
+| 8 | Add `public/favicon.ico` and `public/logo.webp` from `assets/` | Brand assets. They exist only after the design-system PR (#2) is merged into the base branch |
+| 8a | In `app/e2e`: `npm i -D @playwright/test@1.65.1`, then `npx playwright install chromium` | Browser for E2E. `--with-deps` needs `sudo`, so it is not used |
 | 9 | Create `app/frontend/AGENTS.md` with the verified commands (`npm start`, `npm test`, `npm run build`), the zoneless + signals rules and the "no hard-coded colors" rule | Scoped agent instructions |
 
 **Scripts in `package.json`:**
@@ -100,6 +101,11 @@ The tokens come from `assets/design-tokens.json` and `docs/design-guidelines.md`
   | Potrzebne dodatkowe informacje | `#FF9700` | navy `#001D4C` |
   | Przekazane do specjalisty | `#001D4C` | white |
 
+- **Header (app shell):**
+  - Full-width bar with background `#0D244C` (`brand.header`, exposed as `--app-header-bg`).
+  - `logo.webp` at the left at 178×45 px, with ≥ 16 px clear space. The logo is the white wordmark and **must only be placed on navy**, never on the white surface.
+  - Next to it, the product name "Hardware Service Decision Copilot" and the subtitle (§3.7) in white.
+  - It is implemented in the root `app.ts` / `app.html` / `app.scss`. The mobile layout follows `assets/homepage-mobile.png`, without the overlap bug noted in the design guidelines.
 - **Contrast note:** the brand's white-on-orange (`#FFFFFF` on `#FF9700`) is about 2.2:1, which is below WCAG AA for 16 px text. The brand reference uses it for CTAs. The ADR keeps the brand look, and this is recorded as open question Q-F1.
 
 ### 3.3 Application structure (`app/frontend/src/app`)
@@ -108,14 +114,14 @@ The tokens come from `assets/design-tokens.json` and `docs/design-guidelines.md`
 |---|---|---|
 | `app.config.ts` | Providers | `provideRouter`, `provideHttpClient(withFetch())`, `provideDateFnsAdapter` with `pl`, `MAT_DATE_LOCALE` = the date-fns `pl` locale object, `LOCALE_ID='pl'` + `registerLocaleData(localePl)`, `MAT_FORM_FIELD_DEFAULT_OPTIONS` (appearance `outline`) |
 | `app.routes.ts` | Routes | `''` → `CaseFormPage`; `'sprawa'` → `ChatPage` with `hasActiveCaseGuard` (redirects to `''` if no case is in memory, which covers AC-43 after reload); `'**'` → `''` |
-| `core/api/case-api.service.ts` | Service | Builds multipart bodies; `createCase()` and `sendMessage()` return a stream handle (§3.5); `deleteCase()` uses `HttpClient` |
+| `core/api/case-api.service.ts` | Service | Builds multipart bodies. `purchaseDate` is serialized as a **local** calendar date with `format(date, 'yyyy-MM-dd')` (date-fns), never with `JSON.stringify(Date)`, which would shift it to the previous day in UTC. `createCase()` and `sendMessage()` return a stream handle (§3.5); `deleteCase()` uses `HttpClient` |
 | `core/sse/sse-stream.ts` | Function | `fetch` POST → `TextDecoderStream` → `EventSourceParserStream` → typed `CopilotEvent` callbacks, with an `AbortController` |
-| `core/state/case.store.ts` | Signal store (injectable service) | `caseId`, `form`, `formPhoto` (object URL), `decision`, `messages`, `streaming`, `extraPhotoCount`; `computed` `canAttachPhoto`, `canSend` |
+| `core/state/case.store.ts` | Signal store (injectable service) | `caseId`, `form`, `formPhoto` (object URL), `decision`, `messages`, `streaming`, `additionalPhotoCount` (incremented on `done` of a turn that carried a photo, never on send); `computed` `canAttachPhoto`, `canSend` |
 | `core/image/photo-reducer.ts` | Function | Validates the original file (AC-09/10), then `createImageBitmap(file, {imageOrientation:'from-image'})`, scales the longest edge to ≤1600 px on an `OffscreenCanvas` (fallback `<canvas>`), and `convertToBlob('image/jpeg', 0.85)` |
 | `core/markdown/markdown.pipe.ts` | Pure pipe | `marked.parse` → `DOMPurify.sanitize` (allow-list: `p, h3, h4, ul, ol, li, strong, em, br, code`) → `SafeHtml` |
 | `features/case-form/case-form.page.ts` | Page | The form (§3.4), loading steps, submit error banner |
 | `features/case-form/case-type-cards.component.ts` | Component | Two large selectable cards built on `mat-radio-group` (radio semantics, keyboard arrows) |
-| `features/case-form/photo-picker.component.ts` | Component | Drop zone + "Wybierz zdjęcie" button (`<input type=file accept="image/jpeg,image/png,image/webp" capture="environment">`), per-type hint (AC-12), thumbnail + file name + "Usuń" (AC-11) |
+| `features/case-form/photo-picker.component.ts` | Component | Drop zone + "Wybierz zdjęcie" button (`<input type=file accept="image/jpeg,image/png,image/webp">`, **without** `capture`, so mobile browsers offer both the camera and the gallery), per-type hint (AC-12), thumbnail + file name + "Usuń" (AC-11) |
 | `features/case-form/submit-progress.component.ts` | Component | Steps "Przesyłam zdjęcie", "Analizuję zdjęcie", "Przygotowuję decyzję", with the current step highlighted from `progress` events |
 | `features/chat/chat.page.ts` | Page | Layout: `mat-sidenav-container` on ≥ 960 px (summary `mode="side"`); below that, a `mat-expansion-panel` "Szczegóły sprawy" above the chat |
 | `features/chat/case-summary.component.ts` | Component | Case type, category, model, date, thumbnail (click → `MatDialog` enlarged view), current decision badge, "Nowa sprawa" |
@@ -126,7 +132,7 @@ The tokens come from `assets/design-tokens.json` and `docs/design-guidelines.md`
 | `features/chat/typing-indicator.component.ts` | Component | Three animated dots + visually hidden "Asystent pisze…" |
 | `features/chat/new-case-dialog.component.ts` | Dialog | Text from PRD §9.3; "Anuluj" focused by default (`cdkFocusInitial`) |
 | `shared/decision-badge.component.ts` | Component | Label → Polish text + color (§3.2) |
-| `shared/texts.pl.ts` | Constants | **All** fixed Polish strings: validation messages, disclaimer (exact PRD §11 text), greeting, safety block, step labels, errors |
+| `shared/texts.pl.ts` | Constants | **All** fixed Polish strings, exactly as listed in §3.7 |
 
 **State flow:** signals only, with no NgRx. RxJS is used only where `HttpClient` returns observables. Zoneless change detection renders on signal writes.
 
@@ -143,14 +149,17 @@ The tokens come from `assets/design-tokens.json` and `docs/design-guidelines.md`
 | Submit | Filled tertiary button "Wyślij zgłoszenie" | Always enabled while idle. On click: `markAllAsTouched`; if invalid, focus the first invalid control (AC-13); if valid, disable the form and show progress (AC-14) |
 
 - **Forms API:** Angular **Reactive Forms** (`FormGroup`/`FormControl`, typed). Signal Forms were not evaluated in this research, so they are not adopted.
-- **Errors:** `mat-error` messages appear after blur (`updateOn: 'blur'` for display, with validation on change for the counter) and for all fields on submit.
+- **Errors:**
+  - Controls use the default `updateOn: 'change'`, so the counter and the type-dependent revalidation stay live.
+  - `mat-error` messages appear after the field is touched (blur), through Material's default `ErrorStateMatcher`, and for all fields on a submit attempt (AC-13).
 - **Submit error:** the banner above the button shows "Nie udało się przeanalizować zgłoszenia. Spróbuj ponownie." with "Spróbuj ponownie", which re-sends the stored reduced photo and form (AC-40).
 
 ### 3.5 SSE client and chat flow
 
 - **Transport:** native `fetch(url, {method:'POST', body: FormData, signal})`. `EventSource` cannot POST. Angular `HttpClient` progress events repeat the whole accumulated body on each event, which is unsuitable for long streams.
 - **Parsing:** `response.body.pipeThrough(new TextDecoderStream()).pipeThrough(new EventSourceParserStream())`. Each parsed event has a `type` matching ADR-000 §6, and its `data` is parsed as JSON. Verify the exact `EventSourceParserStream` export name in the `eventsource-parser` README during implementation.
-- **Pre-stream errors:** a non-2xx `response.ok=false` before the stream starts is read as a JSON `ApiError` and mapped to field errors, the photo-limit hint or the generic error.
+- **Pre-stream errors:** a non-2xx `response.ok=false` before the stream starts is read as a JSON `ApiError` and mapped as in the §3.7 error table.
+- **Watchdog (AC-40):** if no `decision` event arrives within **60 s** of the request start, the client aborts the stream (`AbortController`) and treats it as `TIMEOUT`.
 - **Mapping into `CaseStore`:**
 
   | Event | Store update |
@@ -160,10 +169,10 @@ The tokens come from `assets/design-tokens.json` and `docs/design-guidelines.md`
   | `decision` | Create the assistant message shell with its segments and update the summary badge (AC-35/36). On the first submit, navigate to `/sprawa` |
   | `delta` | Append to the message body (the markdown re-renders, throttled to one render per animation frame) |
   | `done` | Mark the message complete and re-enable send (AC-38) |
-  | `error` | First submit: stay on the form with the banner. Chat: show the inline error on the user's message |
+  | `error` | **First submit, before `decision`:** stay on the form with the banner. **First submit, after `decision`** (already on `/sprawa`):<br>1. Navigate back to `''`.<br>2. Restore the form values and the reduced photo kept in the store.<br>3. Clear `caseId` and the messages; the backend has stored nothing.<br>4. Show the banner (AC-40).<br>**Chat:** show the inline error on the user's message, discard the partial assistant text |
 
 - **Typing indicator:** shown from send until the first `delta` (AC-37).
-- **Retry (AC-41):** the user message keeps its `clientMessageId`, text and reduced photo blob. "Spróbuj ponownie" re-POSTs them.
+- **Retry (AC-41):** the user message keeps its `clientMessageId`, text and reduced photo blob, and "Spróbuj ponownie" re-POSTs them. If the server had already committed the turn, it **replays** it (ADR-002 §3.4), and the store treats the replay like a normal reply.
 - **Auto-scroll (AC-39):**
   - Follow the newest content only while the user is within 80 px of the bottom.
   - Otherwise show a "Nowe wiadomości ↓" button.
@@ -178,13 +187,80 @@ The tokens come from `assets/design-tokens.json` and `docs/design-guidelines.md`
 - Raw HTML from the model is never trusted. DOMPurify uses the allow-list in §3.3, and Angular's sanitizer applies on `[innerHTML]` as a second layer.
 - Links are not rendered as anchors. The allow-list excludes `a`, because the agent must not send URLs not present in the policy.
 
+### 3.7 Polish UI texts and error handling (single source)
+
+**Texts.** `shared/texts.pl.ts` contains exactly these strings.
+- PRD texts are quoted verbatim (marked **PRD**). The others were defined here on 2026-11-26.
+- The backend uses the same validation texts (ADR-002 §3.6).
+
+| Key | Text |
+|---|---|
+| `app.title` | Hardware Service Decision Copilot |
+| `app.subtitle` | Sprawdź od razu, czy Twój zwrot lub reklamacja zostaną wstępnie przyjęte. |
+| `form.info` | Decyzja jest wstępna i zostanie potwierdzona po oględzinach urządzenia. **PRD** |
+| `form.caseType.complaint` / `.complaintDesc` | Reklamacja / Urządzenie jest uszkodzone lub nie działa **PRD** |
+| `form.caseType.return` / `.returnDesc` | Zwrot / Urządzenie jest sprawne, chcę je oddać **PRD** |
+| `form.caseType.required` | Wybierz typ zgłoszenia. |
+| `form.category.required` | Wybierz kategorię sprzętu. |
+| `form.model.invalid` | Podaj nazwę lub model urządzenia (2–100 znaków) **PRD** |
+| `form.model.placeholder` | np. Galaxy S23, ThinkPad T14 **PRD** |
+| `form.purchaseDate.required` | Podaj datę zakupu. |
+| `form.purchaseDate.invalid` | Podaj poprawną datę w formacie DD.MM.RRRR. |
+| `form.purchaseDate.future` | Data zakupu nie może być w przyszłości **PRD** |
+| `form.purchaseDate.tooOld` | Data zakupu jest zbyt odległa **PRD** |
+| `form.reason.tooShort` | Opisz problem (min. 20 znaków) **PRD** |
+| `form.reason.tooLong` | Opis może mieć maksymalnie 2000 znaków. |
+| `form.photo.button` | Wybierz zdjęcie **PRD** |
+| `form.photo.required` | Dodaj zdjęcie urządzenia. |
+| `form.photo.type` | Dozwolone formaty: JPG, PNG, WebP **PRD** |
+| `form.photo.size` | Zdjęcie przekracza limit 10 MB **PRD** |
+| `form.photo.decode` | Nie udało się odczytać zdjęcia. Wybierz inny plik. |
+| `form.photo.remove` | Usuń **PRD** |
+| `form.photo.hint.none` | Wybierz typ zgłoszenia, aby zobaczyć, jak zrobić zdjęcie. |
+| `form.photo.hint.return` | Sfotografuj całe urządzenie od przodu. Jeśli ma folię ochronną, niech będzie widoczna. (AC-12) |
+| `form.photo.hint.complaint` | Pokaż wyraźnie uszkodzenie lub usterkę – najlepiej z bliska. (AC-12) |
+| `form.submit` | Wyślij zgłoszenie **PRD** |
+| `form.submitError` | Nie udało się przeanalizować zgłoszenia. Spróbuj ponownie. **PRD** |
+| `common.retry` | Spróbuj ponownie **PRD** |
+| `progress.UPLOAD_RECEIVED` / `ANALYZING_PHOTO` / `PREPARING_DECISION` | Przesyłam zdjęcie / Analizuję zdjęcie / Przygotowuję decyzję **PRD** |
+| `chat.summaryTitle` | Szczegóły sprawy **PRD** |
+| `chat.greeting` | Dzień dobry! Oto wstępna ocena Twojego zgłoszenia. |
+| `chat.safety` | **Ze względów bezpieczeństwa:** przestań używać urządzenia i nie ładuj go. Odłóż je z dala od materiałów łatwopalnych. Nie otwieraj obudowy i nie próbuj naprawy. |
+| `chat.decisionChange` | Zmiana decyzji **PRD** |
+| `chat.disclaimer` | Ta decyzja jest wstępna i została przygotowana automatycznie przez asystenta AI. Ostateczną decyzję podejmie zespół serwisu po oględzinach urządzenia. Nie ogranicza to Twoich praw wynikających z przepisów o ochronie konsumentów. **PRD** |
+| `label.ACCEPTED_PRELIMINARY` / `REJECTED` / `NEEDS_MORE_INFO` / `ESCALATED` | Wstępnie przyjęte / Odrzucone / Potrzebne dodatkowe informacje / Przekazane do specjalisty **PRD** |
+| `chat.typing` | Asystent pisze… |
+| `chat.newMessages` | Nowe wiadomości ↓ |
+| `chat.message.empty` | Wpisz wiadomość lub dodaj zdjęcie. |
+| `chat.message.tooLong` | Wiadomość może mieć maksymalnie 2000 znaków. |
+| `chat.photoLimit` | Osiągnięto limit zdjęć w tej sprawie **PRD** |
+| `chat.error.generic` | Nie udało się przygotować odpowiedzi. Spróbuj ponownie. |
+| `chat.error.busy` | Poprzednia wiadomość jest jeszcze przetwarzana. Spróbuj za chwilę. |
+| `chat.error.expired` | Ta sprawa wygasła. Rozpocznij nową sprawę. |
+| `common.newCase` | Nowa sprawa **PRD** |
+| `dialog.newCase.text` / `.cancel` / `.confirm` | Bieżąca rozmowa zostanie utracona. Kontynuować? / Anuluj / Nowa sprawa **PRD** |
+| `common.internal` | Wystąpił błąd. Spróbuj ponownie. |
+
+**Error handling** (wire codes from ADR-000 §6 and ADR-002 §3.7):
+
+| Where | Code / situation | UI behavior | Text key |
+|---|---|---|---|
+| Form submit | 400 `VALIDATION` | Field errors from `fieldErrors`; focus the first invalid field | Per field |
+| Form submit | 413 `PAYLOAD_TOO_LARGE` | Error on the photo field | `form.photo.size` |
+| Form submit | Stream `AI_UNAVAILABLE`, `TIMEOUT`, watchdog, network failure, 500 | Banner with retry; if already on `/sprawa`, go back as in §3.5 | `form.submitError` |
+| Chat | Stream `AI_UNAVAILABLE`, `TIMEOUT`, watchdog, network failure, 500 | Inline error under the user message, with retry | `chat.error.generic` |
+| Chat | 409 `CASE_BUSY` | Inline error, with retry | `chat.error.busy` |
+| Chat | 404 `CASE_NOT_FOUND` | Inline error plus a "Nowa sprawa" button that resets **without** the confirmation dialog (nothing is left to lose) | `chat.error.expired` |
+| Chat | 422 `PHOTO_LIMIT` | Keep the text, remove the photo preview, disable attach with the hint | `chat.photoLimit` |
+| Chat | 400 `VALIDATION` | Error under the composer | `chat.message.empty` / `.tooLong` |
+
 ---
 
 ## 4. Data Structures
 
 | Type | Fields |
 |---|---|
-| `CaseFormValue` | `caseType: 'RETURN'\|'COMPLAINT'`, `category: CategoryCode`, `model: string`, `purchaseDate: Date`, `reason: string`, `photo: File` |
+| `CaseFormValue` | `caseType: 'RETURN'\|'COMPLAINT'`, `category: CategoryCode`, `model: string`, `purchaseDate: Date` (in the UI; sent as `YYYY-MM-DD` local, §3.3), `reason: string`, `photo: File` |
 | `ReducedPhoto` | `blob: Blob` (JPEG), `objectUrl: string`, `originalName: string`, `width`, `height` |
 | `DecisionView` | `label`, `previousLabel?`, `changed`, `changeReasonPl?`, `safety`, `suggestOtherCaseType`, `ruleIds` |
 | `UiMessage` | `id`, `role: 'user'\|'assistant'`, `text`, `photoUrl?`, `createdAt`, `status: 'sending'\|'streaming'\|'complete'\|'failed'`, `clientMessageId?`, `decision?: DecisionView`, `isFirst: boolean` |
@@ -382,7 +458,10 @@ sequenceDiagram
 | Store transitions | Unit | Event sequences from the ADR-002 contract | Signals match the expected state (badge, messages, streaming) | `error` after deltas → failed state, partial text discarded |
 | Markdown sanitization | Unit | `<script>`, `<img onerror>`, `[link](javascript:)` in the body | Removed; headings, lists and bold kept | Unclosed `**` while streaming |
 | Composer keys | Component | Enter, Shift+Enter, empty text, 2001 chars | Send, newline, blocked, blocked | Photo without text allowed (AC-32) |
-| Photo limit | Component | `extraPhotoCount=3` | Attach disabled + hint (AC-33) | — |
+| Photo limit | Component | `additionalPhotoCount=3` | Attach disabled + hint (AC-33) | — |
+| Date serialization | Unit | Date picked as 24.11.2026 with the clock at 00:30 CET | Request body has `purchaseDate=2026-11-24` | Leap day |
+| First-submit error after `decision` | Unit (store) | Events `decision`, `delta`, `error` on the first submit | Back on `''`, form and photo restored, banner shown, `caseId` cleared | Watchdog at 60 s without `decision` |
+| Error mapping | Unit (store) | Each row of the §3.7 error table | The documented behavior and text key | 404 → reset without the dialog |
 | Auto-scroll | Component | Scroll up, then deltas arrive | No jump; "Nowe wiadomości" button shown | At bottom → follows |
 | New-case dialog | Component (`MatDialogHarness`) | Click "Nowa sprawa" | Exact text; "Anuluj" focused; confirm resets | Escape = cancel |
 | Guard | Unit | Navigate to `/sprawa` with no case | Redirect to `''` | — |
@@ -401,4 +480,4 @@ sequenceDiagram
 - TAC-003-05: Pages have no horizontal scrollbar at 360, 390, 768, 1280 and 1920 px widths (Playwright assertion on `scrollWidth <= clientWidth`).
 
 ### Open questions
-- **Q-F1:** The brand's white text on orange `#FF9700` CTAs is about 2.1:1 contrast, below WCAG AA. Keep it for brand fidelity, or switch the CTA text to navy (about 7.6:1)? Product owner to decide. The implementation follows the brand until then.
+- **Q-F1:** The brand's white text on orange `#FF9700` CTAs is about 2.2:1 contrast, below WCAG AA. Keep it for brand fidelity, or switch the CTA text to navy (about 7.6:1)? Product owner to decide. The implementation follows the brand until then.
