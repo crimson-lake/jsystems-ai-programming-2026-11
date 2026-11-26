@@ -426,6 +426,17 @@ describe('CaseFormPage', () => {
       expect(submitter.calls[1].photo).toBe(submitter.calls[0].photo);
     });
 
+    it('brings the banner into view and focuses it so the retry button is reachable (Q4 finding, 390 px)', async () => {
+      const scrolled = vi.fn();
+      HTMLElement.prototype.scrollIntoView = scrolled;
+      await failFirstSubmit();
+      await fixture.whenStable();
+      const banner = el.querySelector<HTMLElement>('.case-form__banner')!;
+      expect(scrolled).toHaveBeenCalled();
+      expect(scrolled.mock.contexts.at(-1)).toBe(banner);
+      expect(document.activeElement).toBe(banner);
+    });
+
     it('has no banner when there is no error', () => {
       expect(el.textContent).not.toContain(texts['form.submitError']);
     });

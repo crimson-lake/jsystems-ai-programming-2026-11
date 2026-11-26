@@ -99,6 +99,15 @@ public class ApiExceptionHandler {
     }
 
     /**
+     * A client that leaves a streaming response (tab closed, navigation) is normal for SSE: the turn is already
+     * cancelled by SseEventWriter, and there is nobody to answer, so log it quietly and write no body.
+     */
+    @ExceptionHandler(org.springframework.web.context.request.async.AsyncRequestNotUsableException.class)
+    void clientGone(org.springframework.web.context.request.async.AsyncRequestNotUsableException e) {
+        log.debug("Client disconnected from a streaming response: {}", e.getMessage());
+    }
+
+    /**
      * Everything else is 500 INTERNAL. Spring's own HTTP errors (wrong method, unknown static resource, missing
      * part, ...) keep their status so that they are not reported as server faults, with the same generic body.
      */

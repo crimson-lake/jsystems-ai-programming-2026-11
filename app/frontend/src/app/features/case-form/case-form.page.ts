@@ -3,6 +3,7 @@ import {
   Component,
   ElementRef,
   computed,
+  afterRenderEffect,
   effect,
   inject,
   signal,
@@ -124,7 +125,9 @@ export class CaseFormPage {
     read: ElementRef<HTMLTextAreaElement>,
   });
   private readonly picker = viewChild(PhotoPickerComponent);
+  private readonly banner = viewChild<ElementRef<HTMLElement>>('banner');
 
+  private focusedBanner: HTMLElement | undefined;
   private lastSubmission: { value: CaseFormValue; photo: ReducedPhoto } | null = null;
   /** Photo kept by the store after a failed first submit; the picker shows it again (AC-40). */
   protected readonly restoredPhoto: PickedPhoto | null = null;
@@ -136,6 +139,15 @@ export class CaseFormPage {
     effect(() => {
       if (this.busy()) this.form.disable({ emitEvent: false });
       else this.form.enable({ emitEvent: false });
+    });
+    // AC-40 at narrow widths: the banner (and its retry button) may be below the fold, so bring it into view
+    // and move focus to it once it appears.
+    afterRenderEffect(() => {
+      const banner = this.banner()?.nativeElement;
+      if (!banner || banner === this.focusedBanner) return;
+      this.focusedBanner = banner;
+      banner.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+      banner.focus({ preventScroll: true });
     });
 
     const saved = this.submitter.form?.();

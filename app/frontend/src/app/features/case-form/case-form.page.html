@@ -75,7 +75,7 @@
   }
 
   @if (submitter.submitError()) {
-    <div class="case-form__banner" role="alert">
+    <div #banner class="case-form__banner" role="alert" tabindex="-1">
       <span>{{ submitErrorText }}</span>
       <button mat-stroked-button type="button" (click)="retry()">{{ retryText }}</button>
     </div>

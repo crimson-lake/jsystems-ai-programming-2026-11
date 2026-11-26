@@ -89,6 +89,12 @@ class ApiExceptionHandlerTest {
             throw new IllegalStateException(SECRET);
         }
 
+        @GetMapping("/client-gone")
+        void clientGone() throws Exception {
+            throw new org.springframework.web.context.request.async.AsyncRequestNotUsableException(
+                    "Servlet container error notification for disconnected client");
+        }
+
         @PostMapping("/post-only")
         void postOnly() {
         }
@@ -226,5 +232,22 @@ class ApiExceptionHandlerTest {
         JsonNode body = body(result);
         assertThat(body.has("fieldErrors")).isFalse();
         assertNoInternals(body);
+    }
+
+    /** Q4 finding: a client that leaves an SSE stream is normal and must not be logged as an unhandled ERROR. */
+    @Test
+    void disconnectedClientIsNotLoggedAsAnError() {
+        ch.qos.logback.classic.Logger logger =
+                (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(ApiExceptionHandler.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
+                new ch.qos.logback.core.read.ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            mvc().get().uri("/client-gone").exchange();
+            assertThat(appender.list).noneMatch(e -> e.getLevel().isGreaterOrEqual(ch.qos.logback.classic.Level.WARN));
+        } finally {
+            logger.detachAppender(appender);
+        }
     }
 }
