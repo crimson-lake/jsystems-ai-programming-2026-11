@@ -1,0 +1,1 @@
+{"input":[{"content":"Napisz dwa zdania o tym, czym jest wstępna decyzja serwisowa.","role":"user","type":"message"}],"instructions":"Odpowiadaj po polsku, krótko.","model":"openai/gpt-6-luna","reasoning":{"effort":"low"},"stream":true}
