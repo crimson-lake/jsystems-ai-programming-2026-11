@@ -37,3 +37,6 @@ playwright/.cache/
 /.idea
 # Playwright CLI output (may contain credentials)
 .playwright-cli/
+
+# OpenCode headless worker run logs
+.agent-runs/
