@@ -1,0 +1,355 @@
+# Implementation Plan — Hardware Service Decision Copilot PoC (whole application)
+
+> **Status: DRAFT, awaiting review by the product owner/human lead.**
+> **Date:** 2026-11-26 · **Author:** orchestrator (Claude Code, Opus 5.5)
+> **Supersedes:** `docs/plans/return-first-decision-implementation-plan.md` (single-slice draft of 2026-11-25). The product owner changed the decision on 2026-11-26: the whole PoC is implemented and delivered in one pass.
+>
+> This plan does not authorize execution, new agents, publication or merge. Each phase starts only after an explicit "go".
+
+---
+
+## 1. Scope
+
+**Deliverable:** the complete PoC described in [`docs/PRD.md`](../PRD.md), delivered as **one feature branch and one pull request**, with one commit per task:
+- all flows [4.1–4.9](../PRD.md#4-main-flows);
+- all acceptance criteria [AC-01 … AC-48](../PRD.md#6-acceptance-criteria);
+- the agent behavior in [PRD §11](../PRD.md#11-agent--system-behavior-specification).
+
+**Architecture:** the ADRs are the specification. They are linked here, not copied.
+
+| ADR | Covers |
+|---|---|
+| [000](../ADR/000-main-architecture.md) | System and contracts |
+| [001](../ADR/001-llm-integration.md) | LLM, prompts and guardrails |
+| [002](../ADR/002-backend.md) | Backend |
+| [003](../ADR/003-frontend.md) | Frontend |
+| [004](../ADR/004-triage-decisions-model.md) | Triage |
+
+**Design:** [`docs/design-guidelines.md`](../design-guidelines.md), with `assets/homepage.png` and `assets/homepage-mobile.png` as the visual reference.
+
+### Traceability: PRD criteria → tasks
+
+| PRD criteria | Implemented in | Proven by |
+|---|---|---|
+| AC-01…AC-15 (form) | T20, T31 | T20/T31 unit specs, T17 E2E, T42 QA |
+| AC-16…AC-19 (image analysis) | T23, T25, T26 | T15 IT, T43 evals |
+| AC-20…AC-29 (first decision) | T22, T25, T26 | T22 unit (guardrails), T15 IT, T43 evals, T17 E2E |
+| AC-30…AC-39 (chat) | T27, T33, T34 | T16 IT, T33/T34 specs, T17 E2E |
+| AC-40…AC-44 (errors, session) | T24, T26, T27, T32–T34 | T15/T16 IT, T17 E2E, T42 QA |
+| AC-45…AC-48 (general) | T25, T30, all FE tasks | T43 evals (Polish), T17 viewports and keyboard, T42 brand comparison |
+| ADR-004 triage (`assist` mode) | T28, T29 | T28 unit, T29 IT, T43 agreement report |
+
+### Out of scope (from PRD §7 and the ADRs)
+
+- Everything in [PRD §7](../PRD.md#7-out-of-scope).
+- Docker ([ADR-000 D-08](../ADR/000-main-architecture.md#d-08-local-only-deployment)).
+- **Switching triage to `fast-path` mode.** The PoC ships `TRIAGE_MODE=assist`. The fast path is enabled only after the eval criteria in [ADR-004 D-T2](../ADR/004-triage-decisions-model.md#d-t2-thresholds-080-low-095-high-asymmetric-safety-calibrate-with-evals-before-enabling-the-fast-path) are met, by a later, separate decision.
+
+---
+
+## 2. Current state (inspected 2026-11-25/26)
+
+| Item | Observed |
+|---|---|
+| Checkout | Worktree `.claude/worktrees/adr-architecture`, branch `adr-architecture`, based on local `design-system` (`dc169d3`). The main checkout is used by another session and stays untouched |
+| Working tree | `M .gitignore` (adds `.claude/worktrees/`), plus untracked `docs/ADR/` (5 ADRs) and `docs/plans/` (this plan + the superseded slice plan). `.env.example` was restored with `git restore` on your decision. A local `.env` exists, is gitignored and was not read |
+| Application code | **None.** `app/` contains only `README.md`. There are no build descriptors, entry points or tests |
+| Toolchain | Present: `node` v24.22.3, `npm` 11.19.1, `gh` 2.105.0, `playwright-cli` 0.1.25 (`~/.local/bin`). Missing: `java`, `opencode`, `docker` (Docker not needed). `mvn` is also missing but not needed, because the Maven Wrapper replaces it |
+| Agent permissions (`.claude/settings.json`) | Denied for Claude: `sudo`, `curl`, `wget`, `rm`, `git reset --hard`, reading `.env`. An **agent hook security-reviews every `pom.xml` Edit/Write** made by Claude |
+| Tracker | GitHub Issues are disabled. The Claude Code task list is empty. **The Claude Code task list is the execution tracker**: one task per matrix row, created only after authorization |
+| Baseline | Nothing to build or test yet, so there are no baseline failures. The first green baseline comes from T10/T11 |
+| Open PRs | #1 (research), #2 (design system). PRD, policies and ADRs are not yet on `main` |
+
+Commands verified so far: only the version checks above. Every project command (`./mvnw …`, `npm …`, `npx playwright …`) comes from the ADRs and is **verified for the first time** in T10/T11. Each task records its real output.
+
+---
+
+## 3. Agents, models and budget
+
+| Role | Agent / model | Provider | Used for | Budget |
+|---|---|---|---|---|
+| Orchestrator | Claude Code, **Opus 5.5** (this session) | Anthropic | Architecture decisions, contracts, `pom.xml`, lockfiles, configs, prompts, integration tasks, diff review, re-running checks, commits | Claude subscription (outside the OpenRouter cap) |
+| Worker (default) | **OpenCode CLI headless**, `openrouter/openai/gpt-6-luna` (Luna 6) | OpenRouter | Bounded implementation and test-writing tasks | OpenRouter cap, see below |
+| Escalation worker | Claude Code `Agent` subagent, `model: sonnet` | Anthropic | Tasks Luna failed twice, or SDK-heavy work | On escalation only |
+| Independent reviewer | Fresh Claude Code subagent (Opus), given the diff, PRD and ADRs only + `/code-review` | Anthropic | T50 | — |
+| Final acceptance | Human lead | — | Plan approval, phase gates, PR merge | — |
+
+**Pricing facts (2026-11-25):**
+- **Luna 6 (`openai/gpt-6-luna`) on OpenRouter:** per million tokens, input costs $0.05–$0.20 and output $0.25–$1.00, depending on the provider (`openrouter.ai/openai/gpt-6-luna/llms.txt`).
+- **`gpt-6-luna-decisions`:** pricing is unknown (its model page returns 404). It is measured in spike S-2.
+- **Not chosen:**
+  - Claude Code Haiku: escalation alternative only. Check `/model` and Anthropic pricing before using it.
+  - Codex Luna: not used, because you asked for OpenCode.
+  - GitHub Copilot: not used. If it is added, check its model picker and current pricing first.
+
+**Budget:** the previous cap of **$2.00** was set for a single slice. Whole-PoC estimate at worst-case provider prices:
+
+| Item | Estimate |
+|---|---|
+| About 22 worker runs × about 150k input + 25k output tokens | $0.30–$1.20 |
+| Spikes S-1/S-2, E2E (≤ 8 runs × about 4 calls), evals (20 cases × 3 repeats × about 4 calls) | $0.15–$0.50 |
+| **Total** | **≈ $0.45–$1.70** |
+
+That fits $2 with little headroom, so the cap is listed as **unresolved decision 1** (recommended: raise it to $5).
+
+**Budget stop rules,** applied to whichever cap you set:
+- **At 75%:** stop dispatching Luna workers and switch to fallback F2.
+- **At 90%:** limit evals to one repeat and E2E to one final run.
+- After each worker run the orchestrator records the cost from OpenRouter's activity page or the run's usage output.
+
+**Harness check:**
+- The Claude Code `Agent` tool with a `model` override is supported in this session (tool schema).
+- OpenCode is **not installed**. It is installed and verified in T01.
+- If OpenCode cannot run, the same matrix runs sequentially with Claude Code subagents using the same briefs (fallback F2).
+
+**Role definitions:** none. Every worker is **ad hoc**, and the exact brief carries the knowledge. No `.claude/agents/` or `.opencode/agents/` files are created for this one-off build.
+
+---
+
+## 4. OpenCode headless — how we use it
+
+Sources: Context7 `/websites/opencode_ai` (docs `cli/commands`, `models`, `permissions`, `policies`, `migrate-v1`).
+
+### 4.1 Install and check (T01)
+
+1. Install into the user prefix, because `/usr` is not writable: `npm install -g --prefix ~/.local @opencode/cli`.
+2. Check the install with `opencode --version` and `opencode run --help`. **Record the real flags in this section** if they differ from the documentation.
+3. **Credentials:**
+   - confirm how the OpenRouter key is supplied with `opencode auth --help` or the providers docs;
+   - the human enters the key (e.g. `! opencode auth login`);
+   - it never goes into `opencode.jsonc` or a brief.
+4. Check the model slug with `opencode models openrouter`, filtered for `gpt-6-luna`.
+
+### 4.2 Project configuration (`opencode.jsonc`, written by the orchestrator in T01)
+
+- **Default model:** `openrouter/openai/gpt-6-luna`.
+- **Ordered `permissions` (V2 format, last match wins):**
+  - allow `edit` on `app/**`;
+  - allow `shell` for `./mvnw *`, `npm test*`, `npm run *`, `npx ng *`, `npx playwright test*`, `git status*`, `git diff*`;
+  - deny `shell` for `git commit*`, `git push*`, `git reset*`, `rm *`, `curl *`, `wget *`.
+- **`policies` (hard deny, applies even with `--auto`):**
+  - `edit` on `**/.env*`, `**/pom.xml`, `**/package.json` and `**/package-lock.json`;
+  - `webfetch:*`.
+- `pom.xml` and the lockfiles stay orchestrator-only. OpenCode bypasses Claude Code's `pom.xml` security hook and would also race on shared dependency files.
+
+### 4.3 Running one task (orchestrator, Bash, in the background)
+
+`opencode run --model openrouter/openai/gpt-6-luna --auto --format json --file .agent-briefs/T20.md "Execute the attached brief exactly. Edit only the files it lists. Finish with the Report section." > .agent-runs/T20.jsonl`
+
+| Flag | Effect |
+|---|---|
+| `run` | Non-interactive mode |
+| `--file` | Attaches the brief |
+| `--format json` | Newline-delimited event log |
+| `--auto` | Auto-approves only what is not explicitly denied |
+
+- `.agent-runs/` is gitignored.
+- The orchestrator never trusts a worker's report. It reads `git diff`, re-runs the checks and only then accepts.
+
+---
+
+## 5. Dependency matrix (authoritative)
+
+**Owner key:**
+- **ORCH:** orchestrator (Opus).
+- **LUNA:** OpenCode + Luna 6 worker.
+- **HUMAN:** human lead.
+
+**Commit rule:** every task ends with the orchestrator reproducing its verification and making one commit (`Area: summary`, named paths only). Workers never commit.
+
+**Paths:**
+- **BE** = `app/backend/src/main/java/com/hsdc/copilot/`
+- **BT** = `app/backend/src/test/java/com/hsdc/copilot/`
+- **FE** = `app/frontend/src/app/`
+
+### Phase 0 — Preconditions
+
+| Task | Observable outcome | PRD/ADR links | Prerequisites | Owner/model | Editable files | Verification and handoff |
+|---|---|---|---|---|---|---|
+| **T00** Baseline commits + branch | Docs committed; branch `feat/poc` created | [ADR-000](../ADR/000-main-architecture.md) | Plan approved | ORCH + HUMAN approval | `.gitignore`, `docs/ADR/*`, `docs/plans/*` | 3 commits: `Chore: ignore Claude Code worktrees`, `Docs: add architecture decision records`, `Docs: add PoC implementation plan`. `git status` clean |
+| **T01** Toolchain + OpenCode | JDK 25 present; OpenCode runs headless with Luna | [ADR-002 §3.1](../ADR/002-backend.md#31-toolchain-installation-course-vm-ubuntu), §4 of this plan | T00 | HUMAN (`! sudo apt install openjdk-25-jdk`, OpenCode credential) + ORCH | `opencode.jsonc`, `.gitignore` (`.agent-runs/`) | `java -version` → 25; `opencode --version`; a smoke run edits nothing (`git status` unchanged) and its cost is recorded. Commit `Tooling: configure OpenCode headless workers` |
+
+### Phase 1 — Scaffolds, spikes and contracts (serialized: shared descriptors)
+
+| Task | Observable outcome | PRD/ADR links | Prerequisites | Owner/model | Editable files | Verification and handoff |
+|---|---|---|---|---|---|---|
+| **T10** Backend scaffold | Spring Boot 4.2 starts; health is UP | [ADR-002 §3.2](../ADR/002-backend.md#32-project-initialization-spring-initializr), [§3.9](../ADR/002-backend.md#39-configuration-applicationyml), [D-B1/D-B2](../ADR/002-backend.md#6-technical-decisions) | T01 | HUMAN runs the Initializr `curl` from ADR-002 §3.2 with `!` (curl is denied for Claude); ORCH | `app/backend/**` (generated), `pom.xml` (openai-java 4.113.0, caffeine, wiremock-spring-boot 4.4.3, `no-frontend` profile, policies copy-resources), `application.yml`, `app/backend/AGENTS.md` | Separate records: `./mvnw -v` (Java 25); `./mvnw -Pno-frontend test` (count); `./mvnw -Pno-frontend spring-boot:run` → `/actuator/health` UP. The POM has `spring-boot-starter-webmvc` and no Jackson 2. Commit `Backend: scaffold Spring Boot 4.2 application` |
+| **T11** Frontend + E2E scaffold | Angular 22 + Material builds, tests and serves; Playwright project exists | [ADR-003 §3.1](../ADR/003-frontend.md#31-initialization), [§3.3](../ADR/003-frontend.md#33-application-structure-appfrontendsrcapp) | T00 (parallel with T10) | ORCH | `app/frontend/**` (generated, `app.config.ts`, `app.routes.ts`, `proxy.conf.json`, `angular.json`, `package*.json` incl. marked, dompurify, eventsource-parser, date-fns, `@fontsource/montserrat`), `app/frontend/AGENTS.md`, `app/e2e/{package.json,package-lock.json,playwright.config.ts}` | `npm test -- --no-watch` (count), `npm run build`, `npm start` + `playwright-cli` screenshot, `cd app/e2e && npx playwright --version`. Commit `Frontend: scaffold Angular 22 with Material` |
+| **T12** Spike S-1 (Responses API) | Verbatim captures: image + `ImageAnalysis` schema, `DecisionResult` schema with `provider.require_parameters`, streaming, 3-turn history, 401 | [ADR-001 D-L1/S-1](../ADR/001-llm-integration.md#d-l1-responses-api-not-chat-completions-for-all-calls) | T10 | ORCH (architecture gate) | `BT/capture/OpenRouterCaptureIT.java` (tag `capture`, excluded by default), `app/backend/src/test/resources/openrouter-captures/*` | `./mvnw -Pno-frontend test -Dgroups=capture` (≤ 6 real calls, cost recorded). Captures contain status, key-less headers, body or SSE transcript, date, model and request. **Gate:** if (a), (b) or (d) fails, amend ADR-001 to the Chat Completions fallback before T23. Commit `Backend: capture OpenRouter Responses API samples` |
+| **T13** Spike S-2 (Decisions API) | Captures of `POST /api/alpha/decisions` with `openai/gpt-6-luna-decisions`, JPEG asset, `noul`/`choice`/`score` questions | [ADR-004 D-T1](../ADR/004-triage-decisions-model.md#d-t1-add-a-triage-stage-with-the-openrouter-decisions-api-behind-a-spike-gate) | T12 | ORCH | `BT/capture/DecisionsCaptureIT.java`, `openrouter-captures/decisions-*.json` | ≤ 3 real calls. **Gate (does not block the critical path):** on failure, the triage lane (T28/T29) is dropped, `TRIAGE_MODE` defaults to `off`, and the result is recorded in ADR-004 Q-T1. Commit `Backend: capture OpenRouter Decisions API samples` |
+| **T14** Shared contracts | Compiling records, interfaces and TS types that freeze every wire and module contract | [ADR-000 §5–6](../ADR/000-main-architecture.md#6-api--interface-contracts), [ADR-001 §4](../ADR/001-llm-integration.md#4-data-structures), [ADR-002 §4](../ADR/002-backend.md#4-data-structures), [ADR-003 §4](../ADR/003-frontend.md#4-data-structures), [ADR-004 §4–5](../ADR/004-triage-decisions-model.md#4-data-structures) | T12, T13 | ORCH | **BE:** `cases/{CaseForm,CaseType,Category,CaseSession,ChatMessage,TurnInput}.java`, `llm/{LlmGateway,LlmRequest,StreamResult}.java`, `analysis/ImageAnalysis.java`, `decision/{DecisionResult,Decision}.java`, `triage/{TriageAnswer,TriageResult,RouteDecision}.java`, `web/sse/*Event.java`, `web/ApiError.java`, `config/*Properties.java`. **FE:** `core/model/*.ts`, `shared/texts.pl.ts` (all PRD strings incl. the exact disclaimer). **Other:** `.env.example` (ADR-000 §7 variables) | `./mvnw -Pno-frontend compile` and `npm run build` green; a unit test checks the disclaimer equals PRD §11. **Frozen after commit:** changes only via ORCH. Commit `Backend+Frontend: add shared contracts` |
+
+### Phase 2 — Failing behavioral tests first
+
+| Task | Observable outcome | PRD/ADR links | Prerequisites | Owner/model | Editable files | Verification and handoff |
+|---|---|---|---|---|---|---|
+| **T15** Failing IT: case submission | `POST /api/cases` SSE contract test, red for the expected reason | [ADR-002 §5](../ADR/002-backend.md#5-interface-contracts), [TAC-002-04/05](../ADR/002-backend.md#technical-acceptance-criteria), [TAC-03/04](../ADR/000-main-architecture.md#technical-acceptance-criteria), AC-22, AC-24, AC-26, AC-40, AC-42 | T14 | LUNA | `BT/web/CaseSubmissionIT.java`, `app/backend/src/test/resources/wiremock/case-submission/**` (from T12 captures) | ORCH confirms it **fails with no handler/404**, not with a compile error. Cases: event order; `response.failed` → `error` last and no case stored; 400 field errors; no internals in bodies. Commit `Backend: add failing case submission IT` |
+| **T16** Failing IT: chat turn | `POST /api/cases/{id}/messages` contract test, red | [ADR-002 §3.4, §5](../ADR/002-backend.md#34-turn-orchestration-and-state), AC-31…AC-36, AC-41 | T14 | LUNA (after T15) | `BT/web/ChatTurnIT.java`, `…/wiremock/chat-turn/**` | Red for the expected reason. Cases: revision (`changed`, `previousLabel`); no revision; 4th photo → 422; concurrent turn → 409; duplicate `clientMessageId` → 409; failure → nothing committed; follow-up "Jaką datę zakupu podałem?" receives form facts in the request journal (AC-34). Commit `Backend: add failing chat turn IT` |
+| **T17** Failing E2E suite | Playwright specs for the main flows, red because the UI is missing | [ADR-003 §8](../ADR/003-frontend.md#8-testing-strategy), [TAC-08](../ADR/000-main-architecture.md#technical-acceptance-criteria) | T11, T14 | LUNA (frontend lane) | `app/e2e/tests/{return-happy,outside-window,complaint-followup,error-banner,new-case,keyboard}.spec.ts` | `npx playwright test` fails on missing elements. Viewports 360 and 1280 px; console-error assertion. Commit `E2E: add failing PoC flow specs` |
+
+### Phase 3a — Backend lane (one Luna worker at a time)
+
+| Task | Observable outcome | PRD/ADR links | Prerequisites | Owner/model | Editable files | Verification and handoff |
+|---|---|---|---|---|---|---|
+| **T20** Validation + photo check | Bean Validation with exact Polish messages; magic-byte `PhotoValidator`; chat text rules | [ADR-002 §3.6](../ADR/002-backend.md#36-request-validation), AC-04/05/07/09/10/31/32 | T16 | LUNA | `BE/cases/validation/**`, `BE/cases/PhotoValidator.java` + `BT/cases/**` unit tests | Tests first, red→green reproduced by ORCH. Boundaries: 1/2/100/101 chars; 19/20; today/tomorrow/−10y/−10y−1d; 0 B / 10 MB / +1 B; GIF/HEIC/renamed txt; whitespace-only chat text. Commit `Backend: validate case form, chat text and photos` |
+| **T21** Policy + prompt repositories | Classpath loading; rule-ID sets extracted | [ADR-001 §3.1](../ADR/001-llm-integration.md#31-classes-and-responsibilities-package-copilotllm-analysis-decision-prompts), [D-07](../ADR/000-main-architecture.md#d-07-policies-and-prompts-as-versioned-markdown-files) | T20 | LUNA | `BE/policy/**`, `BE/prompts/**` + tests | ID sets equal ADR-001 §3.1; a missing file fails startup. Commit `Backend: load policies and prompts` |
+| **T22** Facts + guardrails + rule-ID validator | G1–G6 and day counting as pure functions | [ADR-001 §3.4](../ADR/001-llm-integration.md#34-decision-pipeline-and-guardrails), AC-23…AC-27 | T21 | LUNA | `BE/decision/{CaseFacts,Guardrails,RuleIdValidator}.java` + tests | 100% branch coverage on G1–G5 (TAC-001-04); day 30/31 (R2.3); 2 years ± 1 day incl. 29 February; safety lexicon; G6 re-ask callback. Commit `Backend: add decision guardrails` |
+| **T23** Responses gateway | `ResponsesApiGateway` + `OpenAiClientConfig` | [ADR-001 §3.3, §3.6](../ADR/001-llm-integration.md#33-context-assembly-stateless-replay), [TAC-001-01/02/05](../ADR/001-llm-integration.md#technical-acceptance-criteria) | T12, T22 | LUNA; escalate to Sonnet after 2 failures | `BE/llm/**`, `BE/config/OpenAiClientConfig.java` + tests | WireMock IT from captures: structured parse; ordered deltas; reasoning not forwarded; no `store`/`previous_response_id`; 401/502/timeout mapping; history replay order. Commit `Backend: add OpenRouter Responses gateway` |
+| **T24** Case store, locking, errors | Caffeine TTL store; per-case lock; idempotency set; `ApiExceptionHandler` | [ADR-002 §3.4, §3.7](../ADR/002-backend.md#37-error-handling), [D-B3](../ADR/002-backend.md#d-b3-server-authoritative-turn-with-atomic-commit-and-per-case-lock) | T23 | LUNA | `BE/cases/CaseStore.java`, `BE/cases/CaseLocks.java`, `BE/web/ApiExceptionHandler.java` + tests | TTL via a fake ticker; LRU at 501; `tryLock` 409; bodies for 400/404/409/413/422/500 have no internals. Commit `Backend: add case store, locking and error mapping` |
+| **T25** Prompt texts | All six prompt files | [ADR-001 §3.2, §3.5](../ADR/001-llm-integration.md#32-prompt-files-appbackendsrcmainresourcesprompts), [PRD §11](../PRD.md#11-agent--system-behavior-specification) | T12, T21 | ORCH (quality-critical; runs during the lanes) | `app/backend/src/main/resources/prompts/*.md` | Reviewed against PRD §11 allowed/not-allowed, tone and length; placeholders match `PromptRepository`; triage-signal block per ADR-004 §3.4. Commit `Backend: add AI instruction prompts` |
+| **T26** First-decision pipeline (integration) | `ImageAnalysisService`, `DecisionService`, `CaseService.create`, `SseEventWriter` (heartbeat, cancel), `CaseController`, `DELETE /api/cases/{id}` | [ADR-000 §9.3](../ADR/000-main-architecture.md#93-sequence-diagrams), [ADR-002 §3.5](../ADR/002-backend.md#35-sse-emission-sseeventwriter), [D-B4](../ADR/002-backend.md#d-b4-heartbeat-based-disconnect-detection-and-upstream-cancellation) | T15, T20–T25 | ORCH | `BE/analysis/**`, `BE/decision/DecisionService.java`, `BE/cases/CaseService.java`, `BE/web/{CaseController,SseEventWriter}.java` | **T15 green** + `./mvnw -Pno-frontend verify` (counts and skips recorded). Commit `Backend: stream first decision for new cases` |
+| **T27** Chat turn (integration) | `MessageController`, chat photo analysis, revision flag, atomic commit/rollback, photo counter | [ADR-000 §9.3 chat](../ADR/000-main-architecture.md#chat-message-with-an-optional-photo-and-a-revised-decision-flow-46), [ADR-002 §3.4](../ADR/002-backend.md#34-turn-orchestration-and-state) | T16, T26 | ORCH | `BE/web/MessageController.java`, `BE/cases/CaseService.java` (turn method) | **T16 green** + full backend verify. Commit `Backend: add chat turns with decision revision` |
+| **T28** Triage components | `DecisionsApiClient`, question sets, `TriageService`, `TriageRouter`, `FastPathRuleTable`, templates, agreement logger | [ADR-004 §3](../ADR/004-triage-decisions-model.md#3-component-design) | T13 passed, T22 (backend lane: after T24) | LUNA | `BE/triage/**`, `app/backend/src/main/resources/{triage,templates/fast-path}/**` + tests | Router table tests incl. bounds 0.80/0.95, safety asymmetry, AUDIO/OTHER never T5; captured-response mapping; templates contain AC-22 sections and valid IDs. Commit `Backend: add decisions-model triage` |
+| **T29** Triage wiring (integration) | Triage runs in `assist` mode before the LLM; signals in CASE FACTS; fallback on failure | [ADR-004 §3.1, §3.4, TAC-004-01/02](../ADR/004-triage-decisions-model.md#technical-acceptance-criteria) | T27, T28 | ORCH | `BE/cases/CaseService.java`, `BE/decision/DecisionService.java` (context assembly), `application.yml` | IT: `off` → zero Decisions calls; `assist` → one call + agreement log line; Decisions 502/timeout → normal LLM decision with no error event. Commit `Backend: run triage in assist mode` |
+
+### Phase 3b — Frontend lane (one Luna worker at a time; runs in parallel with Phase 3a)
+
+| Task | Observable outcome | PRD/ADR links | Prerequisites | Owner/model | Editable files | Verification and handoff |
+|---|---|---|---|---|---|---|
+| **T30** Theme + shell | M3 theme with exact tokens, Montserrat, logo/favicon, header | [ADR-003 §3.2](../ADR/003-frontend.md#32-theming-material-3--brand-tokens), [design-guidelines](../design-guidelines.md) | T17 | LUNA | `app/frontend/src/styles.scss`, `app/frontend/src/styles/**`, `FE/layout/**`, `app/frontend/public/{favicon.ico,logo.webp}` | `npm run build`; no hex outside `_tokens.scss` (TAC-003-02); ORCH screenshot vs `assets/homepage.png` header. Commit `Frontend: apply brand theme` |
+| **T31** Case form | Form page, type cards, photo picker, reducer, validators, progress steps, submit error banner | [ADR-003 §3.4](../ADR/003-frontend.md#34-case-form-behavior), [PRD §9.1](../PRD.md#91-screen-1--case-form), AC-01…AC-15, AC-40 | T30 | LUNA | `FE/features/case-form/**`, `FE/core/image/**` + specs | Vitest + Material harness specs first: order, options, messages, focus on the first invalid field, type-dependent hint/marker, reducer ≤1600 px JPEG, retry keeps data. Commit `Frontend: add case form` |
+| **T32** SSE client, API, store | `sse-stream`, `CaseApiService` (create, message, delete), `CaseStore` incl. retry and photo counter | [ADR-003 §3.5](../ADR/003-frontend.md#35-sse-client-and-chat-flow), [ADR-002 §5](../ADR/002-backend.md#5-interface-contracts) | T31 | LUNA | `FE/core/{sse,api,state}/**` + specs | Mid-line chunk splits, `: ping`, stream without `done`, 4xx JSON before the stream, full event sequences → state. Commit `Frontend: add SSE client and case store` |
+| **T33** Chat screen | Summary panel (sidenav / expansion), message list, assistant segments, markdown pipe, badge, typing indicator, new-case dialog, guard, `beforeunload`, thumbnail dialog | [ADR-003 §3.3, §3.6](../ADR/003-frontend.md#36-markdown-rendering-during-streaming), [ADR-001 §3.5](../ADR/001-llm-integration.md#35-message-composition-what-is-model-generated-and-what-is-fixed), [PRD §9.2–9.3](../PRD.md#92-screen-2--decision-chat), AC-22, AC-26, AC-30, AC-35–AC-37, AC-43, AC-44 | T32 | LUNA | `FE/features/chat/**` (except the composer), `FE/shared/decision-badge*`, `FE/core/{markdown,guards}/**` + specs | Sanitization specs, segment order incl. safety first, the "Zmiana decyzji" block, dialog focus on "Anuluj". Commit `Frontend: add chat screen` |
+| **T34** Composer + chat behavior | Composer (Enter / Shift+Enter, counter, photo preview, limit hint), failed-message retry, auto-scroll with a "Nowe wiadomości" button, `LiveAnnouncer` | [ADR-003 §3.5](../ADR/003-frontend.md#35-sse-client-and-chat-flow), AC-31…AC-33, AC-38, AC-39, AC-41, AC-47 | T33 | LUNA | `FE/features/chat/composer/**`, `FE/features/chat/message-list/**` (scroll logic) + specs | Key handling, empty/2001-char blocking, photo-only send, attach disabled at 3, scroll pinned vs not. Commit `Frontend: add chat composer` |
+
+### Phase 4 — Integration and verification
+
+| Task | Observable outcome | PRD/ADR links | Prerequisites | Owner/model | Editable files | Verification and handoff |
+|---|---|---|---|---|---|---|
+| **T40** Packaging into the JAR | `./mvnw package` builds Angular, copies dist + policies; SPA fallback | [ADR-002 §3.8](../ADR/002-backend.md#38-packaging-angular-into-the-jar-and-spa-routing), [D-B5](../ADR/002-backend.md#d-b5-angular-built-by-maven-with-frontend-maven-plugin-policies-copied-from-docs) | T29 (or T27 if triage is dropped), T34 | ORCH | `pom.xml` (frontend-maven-plugin 2.0.2, copy-resources), `BE/web/SpaForwardingConfig.java` + IT | Separate records: compile (`./mvnw package`); tests (BE + FE counts); startup (`java -jar` → health UP < 15 s; `/` and `/sprawa` → index.html; `/main-*.js` → JS; `/api/x` → JSON 404). Commit `Build: package Angular into Spring Boot JAR` |
+| **T41** E2E on the real stack | T17 green against the JAR with real OpenRouter | [ADR-000 §10](../ADR/000-main-architecture.md#10-testing-strategy) | T40 | ORCH runs; LUNA may fix selectors only | `app/e2e/**` (selectors and waits only) | `npx playwright test` (≤ 8 real runs, cost recorded); no console errors; the error-banner spec runs against the app started with an invalid key. Commit `E2E: pass PoC flows on real stack` |
+| **T42** Manual QA | Every screen exercised by hand; brand comparison | [AGENTS.md Manual QA](../../AGENTS.md), [design-guidelines](../design-guidelines.md) | T40 | ORCH via `playwright-cli` + HUMAN look | `docs/plans/qa/poc/*.png` | Screenshots at 390 and 1280 px: form (empty, errors, photo), progress, chat (accepted, rejected, needs-info with a photo re-send, safety case, revision), dialog, error banner, chat inline error. Checklist: navigation, data, Polish text, clean console, colors/typography/radius/logo vs `assets/homepage*.png`. Defects go back to the owning task. Commit `Docs: add PoC QA evidence` |
+| **T43** AI evals + triage agreement | About 20 synthetic cases (return + complaint), 3 repeats; triage agreement report | [ADR-001 §8](../ADR/001-llm-integration.md#8-testing-strategy), [ADR-004 §8](../ADR/004-triage-decisions-model.md#8-testing-strategy), [TAC-07](../ADR/000-main-architecture.md#technical-acceptance-criteria) | T29 | LUNA writes the cases; ORCH runs and judges | `app/evals/cases/*.json`, `BT/eval/EvalIT.java` (tag `eval`), `docs/plans/qa/poc/eval-report.md` | `./mvnw -Pno-frontend test -Dgroups=eval`: label accuracy ≥ 90%, 100% on safety and time windows, cited IDs ⊆ policy, injection case holds; the triage report shows precision by confidence band. A failed safety/window case blocks the PR. Commit `Backend: add AI decision evals` |
+
+### Phase 5 — Review and publication
+
+| Task | Observable outcome | PRD/ADR links | Prerequisites | Owner/model | Editable files | Verification and handoff |
+|---|---|---|---|---|---|---|
+| **T50** Independent review | Findings triaged and fixed | AGENTS.md "Code Review Rules" | T41, T42, T43 | Fresh Opus subagent (diff + PRD + ADRs only) + `/code-review` + HUMAN | Fixes in the owning task's files | Each finding is marked fixed / not-a-bug with evidence; full verification re-run (build, BE+FE tests, startup, E2E, QA spot-check) |
+| **T51** Pull request | PR `feat/poc` → base agreed with the human | — | T50 + HUMAN "publish" | ORCH | — | PR body: scope, AC traceability table (§1), commands with counts, QA screenshots, eval report, OpenRouter spend. **No merge by agents** |
+
+---
+
+## 6. Critical path, parallelism and hotspots
+
+**Critical path:** T00 → T01 → T10 → T12 → T13 → T14 → T15 → T16 → T20 → T21 → T22 → T23 → T24 → T26 → T27 → T29 → T40 → T41 → T42 → T50 → T51.
+
+The backend lane is the long pole, because its workers are serialized to protect the shared `target/` directory. T13 is on the path only as a short spike, and its failure does not block anything except T28/T29.
+
+**Parallel lanes** (disjoint editable files, independent inputs):
+
+| Window | Concurrent work | Notes passed to every worker |
+|---|---|---|
+| After T00 | T10 ∥ T11 | Both ORCH, different folders |
+| After T14 | **Backend lane** (T15 → T16 → T20 → T21 → T22 → T23 → T24 → T28) ∥ **Frontend lane** (T17 → T30 → T31 → T32 → T33 → T34) | At most **2 Luna workers at once**, one per lane. Each brief names the other lane's running task and its files as off-limits |
+| ORCH during the lanes | T25 (prompts), then the integration tasks T26 → T27 → T29 as their inputs land | ORCH-owned files only |
+| After both lanes | T40 → T41 ∥ T43 (different processes; E2E uses the JAR, evals use `-Dgroups=eval`), then T42 | Run T41 and T43 sequentially if the API rate limits |
+
+**Shared-file hotspots** (orchestrator-only, serialized):
+- `app/backend/pom.xml`: security hook; OpenCode would bypass it.
+- `app/frontend/package*.json`, `app/e2e/package*.json`: workers report missing dependencies, and ORCH installs them.
+- `application.yml`, `angular.json`, `app.config.ts`, `app.routes.ts`, `proxy.conf.json`, `.env.example`, `.gitignore`, `opencode.jsonc`.
+- **T14 contract files** (frozen): `core/model/*.ts`, `shared/texts.pl.ts`, all records and interfaces listed in T14.
+- **`CaseService.java` and `DecisionService.java`:** touched by T26, T27 and T29, all owned by ORCH in sequence.
+- **Build directories:**
+  - `app/backend/target/`: backend workers are strictly sequential.
+  - `app/frontend/.angular/` and `node_modules/`: frontend workers are sequential.
+
+**Checkout:** one checkout, the existing worktree `.claude/worktrees/adr-architecture` on the new branch `feat/poc`. No further worktrees, because no two agents edit the same files in parallel. After the PR is merged or abandoned, ORCH proposes `git worktree remove` + `git worktree prune`, with approval.
+
+---
+
+## 7. Briefs and acceptance protocol (after authorization)
+
+**Brief:**
+- Written by ORCH immediately before dispatch as `.agent-briefs/<task>.md`.
+- The repository's `.gitignore` already ignores `.agent-briefs/` ("Private agent briefs"), so briefs stay durable on disk but are **not committed**. Traceability comes from each task's commit message, which references its task ID and this plan.
+- Sections:
+  1. **Goal and observable outcome** (the matrix row).
+  2. **Concurrency:** what is running in parallel; files that are off-limits.
+  3. **Exact editable files.** Anything else is forbidden.
+  4. **Inlined inputs:**
+     - T14 contract source excerpts;
+     - predecessor outputs (signatures, test names, capture file names);
+     - the exact PRD AC texts and ADR rules for this task;
+     - relevant Context7 excerpts (e.g. openai-java streaming for T23, Material harness API for T31).
+  5. **Ordered TDD steps:** write tests → run → confirm the expected failure → implement → run.
+  6. **Test inputs and expected results** (table).
+  7. **Commands**, copied from the verified T10/T11 output.
+  8. **Report:**
+     - files changed;
+     - command tails;
+     - red→green counts;
+     - contradictions;
+     - anything not done.
+- Rules repeated in every brief:
+  - no scope, contract or dependency changes;
+  - no commits;
+  - no `.env` access;
+  - report contradictions instead of resolving them.
+
+**Acceptance by ORCH:**
+1. Read the full `git diff`, checked against the editable-file list.
+2. Re-run the task's checks and the lane's full suite.
+3. Check the AC/ADR traceability.
+4. Commit with named paths.
+5. Update the task's status in the Claude Code task list.
+
+---
+
+## 8. Failure handling and rollback
+
+| Situation | Handling |
+|---|---|
+| Worker output fails verification | Reject it. Revert that task's files with `git restore <paths>`; new untracked files are listed and their removal is requested from the human, because `rm` is denied. Re-dispatch once with the failure output. Second failure → escalate to Sonnet. Third → ORCH implements |
+| Worker edits a forbidden file | Reject the run, revert, and re-dispatch with that file called out |
+| Contradiction between PRD/ADR and reality | The worker stops and reports. ORCH decides and records architectural changes as an ADR amendment before continuing |
+| S-1 fails | Pause T23/T26. Amend ADR-001 to Chat Completions (D-L1). Re-brief T23 |
+| S-2 fails | Drop T28/T29, set `TRIAGE_MODE=off`, record it in ADR-004. Everything else is unaffected |
+| A committed task is later found wrong | `git revert <sha>` of that task's commit (one logical change per commit) |
+
+---
+
+## 9. Fallbacks (smaller deliverables if time, tools, model access or budget run out)
+
+Cut lines, applied in this order. Each keeps the PoC demonstrable.
+
+| ID | Trigger | Cut |
+|---|---|---|
+| F1 | Time short, or S-2 fails | Drop triage (T13 result recorded; T28/T29 skipped; `TRIAGE_MODE=off`) |
+| F2 | OpenCode unusable, or the budget reaches 75% | Continue the same matrix **sequentially** with Claude Code subagents (`model: haiku`, `sonnet` on escalation), using the same briefs |
+| F3 | Time still short | Drop chat photos (AC-32/AC-33 deferred). The composer is text-only. Flow 4.4 then needs "Nowa sprawa" for a new photo, and this is documented in the PR |
+| F4 | Time critically short | Deliver **slice 1 only** (return: form → first streamed decision), the scope of the superseded slice plan: T10–T15, T20–T26, T30–T33 read-only, T40–T42 |
+| F5 | Budget reaches 90% | One eval repeat and one final E2E run only |
+| — | JDK cannot be installed | No meaningful cut exists. Finish the frontend lane with unit tests only, report the blocker and wait |
+
+---
+
+## 10. Unresolved decisions
+
+1. **OpenRouter budget:** the $2 cap you set was for one slice. The whole-PoC estimate is $0.45–$1.70, which leaves little margin. **Recommended: raise it to $5**, or keep $2 and accept the fallback cuts F2/F5.
+2. **PR base:** recommended order is to merge PR #2 and the docs (PRD, policies, ADRs, this plan) first, so the PoC PR shows only code. The alternative is a PR against `adr-architecture`.
+3. **Privileged commands** (T01/T10): `! sudo apt install openjdk-25-jdk` and the Initializr `curl` are denied for Claude by `.claude/settings.json`, so you run them. Alternatively you can add narrow allow rules yourself; I do not edit permission settings.
+4. **OpenCode credential method:** confirmed in T01. You enter the key.
+5. **Carried-over product questions** (non-blocking):
+   - ADR-003 Q-F1: CTA contrast.
+   - ADR-004 Q-T2/Q-T3: film requirement, precision target.
+
+No new ADR is needed for the full scope. Any contradiction found by S-1, S-2 or T10 becomes an ADR amendment proposed by ORCH before work continues.
+
+---
+
+## 11. First bounded task and review gate
+
+**Review gate (now):** you review this plan. Planning does not authorize execution.
+
+**After your "go"**, the first bounded task is **T00**:
+1. Three commits in the worktree:
+   - `.gitignore`;
+   - `docs/ADR/*`;
+   - `docs/plans/poc-implementation-plan.md`.
+
+   The superseded slice plan is not committed; you decide whether to delete it.
+2. Create branch `feat/poc`.
+
+The next task is **T01**, which needs your two privileged commands and the OpenCode credential.
