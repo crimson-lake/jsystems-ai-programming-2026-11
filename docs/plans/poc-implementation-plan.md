@@ -497,8 +497,8 @@ The backend lane, with ORCH's own Maven runs included, is the long pole.
 - no privileged commands needed.
 
 **Open:**
-1. **Base branch contents:** the base must contain PR #2 (design system) and PR #3 (docs) before T00.
-2. **Base branch name:** the course README says to develop in `app-implementation`, not `main`. You postponed creating it (2026-11-26). Until you decide, PR #2 and PR #3 keep base `main`, and T00 is blocked.
+1. ~~Base branch contents~~ **Resolved 2026-11-26:** the base branch `app-implementation` was created from `origin/main` with PR #2 (design system) and PR #3 (docs) merged in.
+2. ~~Base branch name~~ **Resolved 2026-11-26:** `app-implementation` (course README). `feat/poc` is created from it in T00, and the final PR (T51) targets it.
 3. **OpenCode credential method:** confirmed in T01; you enter the key.
 4. **GitHub Issues mirror (optional):** issues are disabled on the repository. If you want them, say so after approving the plan. ORCH will then run `gh repo edit --enable-issues`, create one issue per row and fill the `Issue` column (§5.1).
 5. **Approval prompts:** `./mvnw`, `java`, `opencode`, `playwright-cli`, `gh`, `kill`, `cp`, `mkdir` and `git rm` each prompt. You can add narrow allow rules in `/permissions` to speed execution. I do not edit permission settings.
@@ -515,9 +515,43 @@ No new ADR is needed. Any contradiction found by S-1, S-2 or T10 becomes an ADR 
 
 **Review gate:** passed. The plan was accepted on 2026-11-26. Execution still needs an explicit "go".
 
-**After your "go"** and the §10.1–10.2 decisions, the first bounded task is **T00**:
-1. The base branch contains PR #2 and PR #3.
-2. Create `feat/poc`.
+**After your "go"**, the first bounded task is **T00**:
+1. Check out `app-implementation`, which already contains PR #2 and PR #3.
+2. Create `feat/poc` from it.
 3. Run the `test -f` checks.
 
 **T01** then needs from you only the OpenCode credential and a root `.env` with `OPENROUTER_API_KEY` and `LLM_MODEL`.
+
+---
+
+## 12. Definition of Done
+
+The PoC implementation is **done** only when **all** of the following are true and evidenced in the repository. An autonomous run (for example Claude Code `/goal`) must use this list as its stop condition.
+
+1. **Status:** every row of the §5 matrix has `Status` = `DONE`, or `SKIPPED: <fallback ID>` with the fallback recorded in §9 and, for scope cuts, in the PRD. Each mirrored GitHub issue (#4–#40) has a closing comment, or is listed under `Closes` in the final PR.
+2. **Requirements:** every PRD acceptance criterion AC-01…AC-48 is implemented and proven by the evidence named in the §1 traceability table. The PR body contains that table, with links to the tests and screenshots.
+3. **Build and tests, recorded separately with non-zero counts:**
+   - `./mvnw package` (from `app/backend`) is green;
+   - Surefire, Failsafe and Vitest runs are green;
+   - JaCoCo's guardrail check passes;
+   - no new warnings.
+4. **Startup:** the packaged JAR started from the repo root reports health UP in < 15 s and serves `/` and `/sprawa` (ADR-000 TAC-02).
+5. **E2E on the real stack:** the T41 suite passes against the JAR with real OpenRouter. The coverage teardown proves every endpoint and every AI step (`TRIAGE` unless it was dropped by F1, `VISION`, `DECISION`, `STREAM`) ran for real (ADR-000 §10). No mocks are used.
+6. **AI evals:** T43 passes 100% of its form- and policy-driven assertions. The photo record is in `docs/plans/qa/poc/eval-report.md`.
+7. **Manual gates:** Q0–Q5 have passed, with `playwright-cli` screenshots committed under `docs/plans/qa/poc/<ID>/` and indexed in `docs/plans/qa/poc/README.md`.
+8. **Mocks:** every WireMock stub and every frontend protocol fixture comes from a recorded real call (TAC-001-06). The missing-capture list is published in the PR.
+9. **Review:** the independent review (T50) has no unresolved correctness or security finding.
+10. **Demo:** `docs/demo/poc-demo.mp4` (≤ 25 MB, H.264) and `docs/demo/README.md` are committed (T45).
+11. **Publication:** PR `feat/poc` → `app-implementation` is open, with the T51 body (traceability, commands and counts, QA index, demo video, eval report, missing captures, OpenRouter spend ≤ $2, `Closes #…`). **It is not merged by an agent.**
+12. **Hygiene:**
+    - no secrets in commits, logs or screenshots;
+    - `git status` is clean apart from gitignored files;
+    - the OpenRouter spend is recorded and ≤ $2, or the human approved a higher cap.
+
+**Stop and ask the human instead of continuing when:**
+- a §10 open decision blocks the next task (notably the PRD §12 photo-limit assumption before T25);
+- a spike gate fails (S-1);
+- a budget cut line is reached;
+- a gate finds a product-level defect;
+- a permission prompt is denied;
+- a contradiction between PRD/ADR and reality needs an ADR amendment.
