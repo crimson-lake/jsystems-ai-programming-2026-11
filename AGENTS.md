@@ -92,7 +92,7 @@ Verify only the scope relevant to your change. If the change affects runtime beh
 
 **Verification:** For runtime changes, start the real application and finish with Manual QA. Record compilation/build, test execution and startup as separate checks, including discovery counts and skips. A successful build or E2E run alone does not establish that the app works. Documentation-only changes use diff, link and consistency checks and do not require application startup. Fix errors and warnings introduced by the change; report pre-existing failures without hiding them.
 
-**Env Vars:** See `.env.example` (OPENROUTER_API_KEY required)
+**Env Vars:** See `.env.example` (`OPENROUTER_API_KEY` and `LLM_MODEL` required; optional variables are listed in `docs/ADR/000-main-architecture.md` §7)
 
 ### Sub-agents
 - Prefer ad hoc subagents for one-off work. Reuse a named role only after checking its model and permissions; add a short custom definition (for example under `.claude/agents/` for Claude Code or `.codex/agents/` for Codex) only for a recurring need. The starting repository has no active custom roles.
