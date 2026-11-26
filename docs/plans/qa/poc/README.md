@@ -78,3 +78,10 @@ Screenshots from per-task QA and phase gates (plan §4.5). Each entry gives the 
 - **`ai.call` lines** (`test-results/app-t26.log`, model `openai/gpt-6-luna`): `VISION OK 12242 ms 2653/357`, `DECISION OK 2817 ms 2257/120`, `STREAM OK 5222 ms 1846/366`. No customer text in the log.
 - **Port 8081, `OPENROUTER_API_KEY=invalid`:** `case, progress×2, error{AI_UNAVAILABLE}`; log has `AI_CONFIG … 401` at ERROR and `ai.call step=VISION status=ERROR`; nothing stored.
 - **Recordings for frontend tests:** `app/frontend/src/testing/captures/case-success.sse` and `case-error.sse` (byte-exact), described in that folder's README.
+
+## T27 — Chat turn, real-API check (2026-11-26)
+
+- **App commit:** the T27 commit (backend `spring-boot:run`, real `.env`). API-only task, no screenshots.
+- **Checks via `playwright-cli` `run-code`:** a text turn ("Jaką datę zakupu podałem?"); a photo turn (`VISION` in the log); the same `clientMessageId` again → replay (`decision`, one `delta`, `done`, no `ai.call`); two concurrent turns → one 409 `CASE_BUSY`; `DELETE` → 204, then a message → 404 `CASE_NOT_FOUND`; 3 committed photo turns then a 4th → 422 `PHOTO_LIMIT`; empty text without photo → 400; an 11.6 MB photo part → 413.
+- **`ai.call` lines** (`test-results/app-t27.log`, model `openai/gpt-6-luna`): all steps OK except one chat-turn `DECISION status=TIMEOUT latencyMs=20033` (nothing committed; the retry succeeded). Chat-turn decisions took 12–17 s, so the per-call decision timeout was raised to 30 s (still capped by the 55 s deadline; ADR-001 §3.6 amended).
+- **Recordings:** `chat-text.sse`, `chat-photo.sse`, `chat-replay.sse`, `chat-error-timeout.sse`, `http-400/404/409/413/422.json` in `app/frontend/src/testing/captures/`.

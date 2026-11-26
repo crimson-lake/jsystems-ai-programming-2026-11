@@ -5,16 +5,19 @@ import com.hsdc.copilot.decision.Decision;
 import com.hsdc.copilot.triage.TriageResult;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * One customer case (ADR-002 section 4). Mutable: every field except {@code lock} and
- * {@code deleted} is accessed only while holding {@link #getLock()}.
+ * {@code deleted} is written only while holding {@link #getLock()}. {@code messages} and
+ * {@code committedClientMessageIds} are also safe to read without the lock, because the pre-stream replay check
+ * (ADR-002 section 3.4, step 3) runs before the busy check and may overlap a running turn's commit.
  */
 public class CaseSession {
 
@@ -26,8 +29,8 @@ public class CaseSession {
 
     private TriageResult triage;
     private final List<ImageAnalysis> analyses = new ArrayList<>();
-    private final List<ChatMessage> messages = new ArrayList<>();
-    private final Set<UUID> committedClientMessageIds = new HashSet<>();
+    private final List<ChatMessage> messages = new CopyOnWriteArrayList<>();
+    private final Set<UUID> committedClientMessageIds = ConcurrentHashMap.newKeySet();
     private Decision currentDecision;
     private int additionalPhotoCount;
 

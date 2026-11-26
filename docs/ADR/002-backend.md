@@ -135,7 +135,7 @@ Boot 4 points the implementing agent must respect (from the 4.0 migration guide 
    4. Turn running: 409 `CASE_BUSY`.
    5. Validation: 400.
    6. Photo limit: 422.
-1. Acquire the case's `ReentrantLock` with `tryLock()`. If it is busy, return **409** so that two concurrent turns cannot interleave history.
+1. Reserve the case atomically on the request thread (`running.putIfAbsent(caseId, …)`; amended 2026-11-26: a `ReentrantLock` taken on the request thread cannot be released by the turn executor thread). If it is already reserved, return **409** so that two concurrent turns cannot interleave history. The turn thread then holds the session's `ReentrantLock` while it reads and commits.
 2. Build a **working copy** of the turn: user message, new analysis and incremented photo counter.
 3. Run the pipeline (ADR-001) and emit `progress`, then `decision`, then `delta` events.
 4. On success, **commit atomically**: append the user message, analysis and assistant message, set `currentDecision` and `additionalPhotoCount`, re-`put` the session into the store, and then emit `done`.

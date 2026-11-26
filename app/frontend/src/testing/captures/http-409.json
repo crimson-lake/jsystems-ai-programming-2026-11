@@ -1,0 +1,11 @@
+{
+  "status": 409,
+  "headers": {
+    "content-type": "application/json",
+    "transfer-encoding": "chunked",
+    "date": "Thu, 26 Nov 2026 11:55:54 GMT",
+    "keep-alive": "timeout=60",
+    "connection": "keep-alive"
+  },
+  "body": "{\"code\":\"CASE_BUSY\"}"
+}

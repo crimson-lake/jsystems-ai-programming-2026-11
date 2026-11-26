@@ -1,0 +1,13 @@
+event:progress
+data: {"step":"ANALYZING_PHOTO"}
+
+event:progress
+data: {"step":"PREPARING_DECISION"}
+
+: ping
+
+: ping
+
+event:error
+data: {"code":"TIMEOUT","message":"Nie udało się przeanalizować zgłoszenia. Spróbuj ponownie."}
+

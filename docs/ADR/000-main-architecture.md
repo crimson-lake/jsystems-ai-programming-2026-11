@@ -171,7 +171,7 @@ The API base path is `/api`. It is JSON except for multipart uploads and SSE str
 |---|---|---|
 | `case` | `{caseId}` | The case was created. Sent first, only by `POST /api/cases` |
 | `progress` | `{step: UPLOAD_RECEIVED \| ANALYZING_PHOTO \| PREPARING_DECISION \| WRITING_REPLY}` | Drives the loading steps (AC-14, PRD §9.1) |
-| `decision` | `{label, previousLabel?, changed, changeReasonPl?, safety, suggestOtherCaseType, ruleIds[]}` | Arrives **before** any text. The UI updates the summary badge (AC-35/36) |
+| `decision` | `{label, previousLabel?, changed, changeReasonPl?, safety, suggestOtherCaseType, ruleIds[]}` | Arrives **before** any text. The UI updates the summary badge (AC-35/36). `previousLabel` is null unless `changed` is true |
 | `delta` | `{text}` | Markdown chunk of the assistant message, appended in order (AC-37) |
 | `done` | `{messageId}` | The message is complete and committed to the case |
 | `error` | `{code: AI_UNAVAILABLE \| TIMEOUT, message}` | A Polish user-facing message. After it the stream closes and nothing is committed. It may arrive before or after `decision`. Validation and missing-case errors are returned before the stream as HTTP errors, never as stream events |

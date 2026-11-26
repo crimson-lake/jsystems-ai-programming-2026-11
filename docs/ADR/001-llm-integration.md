@@ -176,12 +176,12 @@ To make AC-22, AC-26 and AC-35 order-proof, the assistant message is rendered fr
 |---|---|---|---|
 | Triage (ADR-004) | 8 s | none; on failure, continue without signals | First submission only |
 | Vision | 20 s | none | Turns with a photo |
-| Structured decision | 20 s | none | Every turn |
+| Structured decision | 30 s (amended 2026-11-26 from 20 s: real chat-turn decisions took 12–17 s and one hit 20 s in T27 QA) | none | Every turn |
 | G6 corrective re-ask | the remaining time, max 15 s | only if ≥ 15 s remain | Only when IDs are invalid |
 | Stream: first delta | before the 55 s deadline | none | Every turn |
 | Stream: whole message | 60 s after the `decision` event | none | Every turn |
 
-- **Worst case before `decision`:** 8 + 20 + 20 = 48 s, plus the re-ask only when time remains.
+- **Worst case before `decision`:** every per-call timeout is capped by the time left in the 55 s deadline (`Deadline.callTimeout`), so the budget holds even though 8 + 20 + 30 exceeds it; the re-ask runs only when ≥ 15 s remain.
 - **Retries:** there are no automatic retries (SDK `maxRetries(0)`). The customer retries through "Spróbuj ponownie" (AC-40, AC-41).
 - **Deadline:** if it passes before the `decision` event, the result is `TIMEOUT`.
 - **Frontend watchdog:** the frontend aborts after 60 s without a `decision` event (ADR-003 §3.5).

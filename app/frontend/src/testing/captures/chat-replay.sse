@@ -1,0 +1,9 @@
+event:decision
+data: {"label":"REJECTED","previousLabel":null,"changed":false,"changeReasonPl":"","safety":false,"suggestOtherCaseType":"COMPLAINT","ruleIds":["R1.1","R3.4"]}
+
+event:delta
+data: {"text":"W formularzu podałeś datę zakupu: **16 listopada 2026 r.**"}
+
+event:done
+data: {"messageId":"848e8f45-5cc1-42aa-9640-2437bbed7aed"}
+

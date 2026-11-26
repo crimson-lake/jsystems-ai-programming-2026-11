@@ -1,0 +1,71 @@
+event:progress
+data: {"step":"PREPARING_DECISION"}
+
+: ping
+
+event:decision
+data: {"label":"REJECTED","previousLabel":null,"changed":false,"changeReasonPl":"","safety":false,"suggestOtherCaseType":"COMPLAINT","ruleIds":["R1.1","R3.4"]}
+
+event:progress
+data: {"step":"WRITING_REPLY"}
+
+event:delta
+data: {"text":"W"}
+
+event:delta
+data: {"text":" formular"}
+
+event:delta
+data: {"text":"zu"}
+
+event:delta
+data: {"text":" poda"}
+
+event:delta
+data: {"text":"łe"}
+
+event:delta
+data: {"text":"ś"}
+
+event:delta
+data: {"text":" dat"}
+
+event:delta
+data: {"text":"ę"}
+
+event:delta
+data: {"text":" zak"}
+
+event:delta
+data: {"text":"upu"}
+
+event:delta
+data: {"text":":"}
+
+event:delta
+data: {"text":" **"}
+
+event:delta
+data: {"text":"16"}
+
+event:delta
+data: {"text":" listop"}
+
+event:delta
+data: {"text":"ada"}
+
+event:delta
+data: {"text":" "}
+
+event:delta
+data: {"text":"2026"}
+
+event:delta
+data: {"text":" r."}
+
+event:delta
+data: {"text":"**"}
+
+event:done
+data: {"messageId":"848e8f45-5cc1-42aa-9640-2437bbed7aed"}
+

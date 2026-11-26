@@ -1,0 +1,124 @@
+event:progress
+data: {"step":"ANALYZING_PHOTO"}
+
+event:progress
+data: {"step":"PREPARING_DECISION"}
+
+: ping
+
+event:decision
+data: {"label":"REJECTED","previousLabel":null,"changed":false,"changeReasonPl":"","safety":false,"suggestOtherCaseType":"COMPLAINT","ruleIds":["R1.1","R3.4"]}
+
+event:progress
+data: {"step":"WRITING_REPLY"}
+
+: ping
+
+event:delta
+data: {"text":"D"}
+
+event:delta
+data: {"text":"zię"}
+
+event:delta
+data: {"text":"ku"}
+
+event:delta
+data: {"text":"ję"}
+
+event:delta
+data: {"text":" za"}
+
+event:delta
+data: {"text":" dodatk"}
+
+event:delta
+data: {"text":"owe"}
+
+event:delta
+data: {"text":" zdję"}
+
+event:delta
+data: {"text":"cie"}
+
+event:delta
+data: {"text":"."}
+
+event:delta
+data: {"text":" Na"}
+
+event:delta
+data: {"text":" podstaw"}
+
+event:delta
+data: {"text":"ie"}
+
+event:delta
+data: {"text":" wid"}
+
+event:delta
+data: {"text":"ocz"}
+
+event:delta
+data: {"text":"nego"}
+
+event:delta
+data: {"text":" pę"}
+
+event:delta
+data: {"text":"knię"}
+
+event:delta
+data: {"text":"cia ek"}
+
+event:delta
+data: {"text":"ranu"}
+
+event:delta
+data: {"text":" zwrot"}
+
+event:delta
+data: {"text":" w ramach"}
+
+event:delta
+data: {"text":" zmiany"}
+
+event:delta
+data: {"text":" zdania nie"}
+
+event:delta
+data: {"text":" może zostać"}
+
+event:delta
+data: {"text":" przyjęty"}
+
+event:delta
+data: {"text":" "}
+
+event:delta
+data: {"text":"[R1.1]"}
+
+event:delta
+data: {"text":" "}
+
+event:delta
+data: {"text":"[R3.4]. Moż"}
+
+event:delta
+data: {"text":"esz zgłosi"}
+
+event:delta
+data: {"text":"ć usterkę"}
+
+event:delta
+data: {"text":" w ramach reklamacji,"}
+
+event:delta
+data: {"text":" wybierając **Now"}
+
+event:delta
+data: {"text":"a sprawa**."}
+
+event:done
+data: {"messageId":"57ea61b6-9cec-4561-93f7-0771c0083c50"}
+

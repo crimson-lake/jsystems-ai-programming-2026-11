@@ -2,7 +2,9 @@ package com.hsdc.copilot.cases;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,6 +19,7 @@ import org.springframework.stereotype.Service;
 
 import com.hsdc.copilot.analysis.ImageAnalysis;
 import com.hsdc.copilot.analysis.ImageAnalysisService;
+import com.hsdc.copilot.decision.CaseContextAssembler;
 import com.hsdc.copilot.decision.Decision;
 import com.hsdc.copilot.decision.DecisionService;
 import com.hsdc.copilot.decision.DecisionService.MessageKind;
@@ -45,6 +48,7 @@ import com.hsdc.copilot.web.sse.StreamErrorEvent;
 public class CaseService {
 
     private static final Logger log = LoggerFactory.getLogger(CaseService.class);
+    private static final int PHOTO_LIMIT = CaseContextAssembler.PHOTO_LIMIT;
 
     private final CaseStore store;
     private final ImageAnalysisService analysis;
@@ -54,6 +58,32 @@ public class CaseService {
     private final Map<UUID, RunningTurn> running = new ConcurrentHashMap<>();
 
     private record RunningTurn(CaseSession session, CancelToken token) {
+    }
+
+    /** Result of the pre-stream checks of a chat turn: either a replay of a committed turn or a reservation. */
+    public sealed interface TurnStart permits Replay, Reservation {
+    }
+
+    /** A committed turn to replay: its decision snapshot, the full assistant text and the assistant message ID. */
+    public record Replay(UUID caseId, Decision decision, String text, UUID messageId) implements TurnStart {
+    }
+
+    /**
+     * The case is reserved for one running turn (the busy check). Must be passed to {@link #runTurn} or released
+     * with {@link #release}.
+     */
+    public static final class Reservation implements TurnStart {
+        private final CaseSession session;
+        private final RunningTurn turn;
+
+        private Reservation(CaseSession session, RunningTurn turn) {
+            this.session = session;
+            this.turn = turn;
+        }
+
+        public UUID caseId() {
+            return session.getCaseId();
+        }
     }
 
     public CaseService(CaseStore store, ImageAnalysisService analysis, DecisionService decisions, Clock clock,
@@ -139,6 +169,183 @@ public class CaseService {
         }
     }
 
+    // ------------------------------------------------------------------ chat turn (ADR-002 section 3.4)
+
+    /**
+     * Pre-stream checks 2-4 of a chat turn on the request thread: unknown or deleted case (404), an already committed
+     * {@code clientMessageId} (replay, no other check applies), a running turn (409). On success the case is reserved
+     * for this turn; validation (400) and the photo limit (422, {@link #checkPhotoLimit}) follow.
+     */
+    public TurnStart beginTurn(UUID caseId, UUID clientMessageId, CancelToken token) {
+        CaseSession session = store.find(caseId).filter(s -> !s.isDeleted())
+            .orElseThrow(() -> new CaseNotFoundException("unknown or expired case"));
+        if (clientMessageId != null && session.getCommittedClientMessageIds().contains(clientMessageId)) {
+            Optional<Replay> replay = replayOf(session, clientMessageId);
+            if (replay.isPresent()) {
+                return replay.get();
+            }
+        }
+        RunningTurn turn = new RunningTurn(session, token);
+        if (running.putIfAbsent(caseId, turn) != null) {
+            throw new CaseBusyException("a turn of the case is running");
+        }
+        return new Reservation(session, turn);
+    }
+
+    /** Check 6: a photo is rejected with 422 when the case already has {@value CaseContextAssembler#PHOTO_LIMIT}. */
+    public void checkPhotoLimit(Reservation reservation, boolean hasPhoto) {
+        if (hasPhoto && reservation.session.getAdditionalPhotoCount() >= PHOTO_LIMIT) {
+            throw new PhotoLimitException("additional photo limit reached");
+        }
+    }
+
+    /** Releases a reservation whose turn will not run (pre-stream rejection). Idempotent. */
+    public void release(Reservation reservation) {
+        running.remove(reservation.caseId(), reservation.turn);
+    }
+
+    /** Streams a committed turn again: {@code decision}, one {@code delta} with the full text, {@code done}. */
+    public void replay(Replay replay, SseEventWriter writer) {
+        MDC.put(AiCallContext.CASE_ID_KEY, replay.caseId().toString());
+        try {
+            if (writer.send(SseEventType.DECISION, decisionEvent(replay.decision()))
+                    && writer.send(SseEventType.DELTA, new DeltaEvent(replay.text()))) {
+                writer.send(SseEventType.DONE, new DoneEvent(replay.messageId()));
+            }
+            log.info("Turn replayed from the committed clientMessageId; no AI call");
+        }
+        finally {
+            writer.complete();
+            MDC.remove(AiCallContext.CASE_ID_KEY);
+        }
+    }
+
+    /**
+     * Runs a reserved chat turn on the turn executor (ADR-000 section 9.3). All work happens on a working copy; the
+     * stored session changes only in the atomic commit just before {@code done}. Chat photos are not triaged.
+     */
+    public void runTurn(Reservation reservation, TurnInput input, SseEventWriter writer) {
+        CaseSession session = reservation.session;
+        UUID caseId = session.getCaseId();
+        CancelToken token = writer.cancelToken();
+        AtomicBoolean firstDeltaTimedOut = new AtomicBoolean();
+        MDC.put(AiCallContext.CASE_ID_KEY, caseId.toString());
+        session.getLock().lock();
+        try {
+            CaseSession working = workingCopy(session);
+            Deadline deadline = Deadline.in(decisionBudget);
+            writer.startHeartbeat();
+            boolean hasPhoto = input.photoJpeg() != null;
+            ImageAnalysis imageAnalysis = null;
+            Integer analysisIndex = null;
+            if (hasPhoto) {
+                progress(writer, Step.ANALYZING_PHOTO);
+                imageAnalysis = analysis.analyze(working, input.photoJpeg(), deadline);
+                working.getAnalyses().add(imageAnalysis);
+                analysisIndex = working.getAnalyses().size() - 1;
+                working.setAdditionalPhotoCount(working.getAdditionalPhotoCount() + 1);
+            }
+            progress(writer, Step.PREPARING_DECISION);
+            Decision decision = decisions.decide(working, input, deadline);
+            deadline.check();
+            send(writer, SseEventType.DECISION, decisionEvent(decision));
+            progress(writer, Step.WRITING_REPLY);
+
+            ChatMessage userMessage = new ChatMessage(UUID.randomUUID(), ChatMessage.Role.USER,
+                    input.text() == null ? "" : input.text(), input.clientMessageId(), hasPhoto, analysisIndex, null,
+                    false, null, clock.instant());
+            working.getMessages().add(userMessage);
+
+            AtomicBoolean firstDelta = new AtomicBoolean();
+            watchFirstDelta(deadline, firstDelta, firstDeltaTimedOut, token);
+            String text = decisions.streamMessage(working, decision, MessageKind.REPLY, delta -> {
+                firstDelta.set(true);
+                send(writer, SseEventType.DELTA, new DeltaEvent(delta));
+            }, token);
+
+            ChatMessage assistant = new ChatMessage(UUID.randomUUID(), ChatMessage.Role.ASSISTANT, text, null, false,
+                    null, decision, decision.changed(), decision.changed() ? decision.previousLabel() : null,
+                    clock.instant());
+            if (session.isDeleted() || token.isCancelled()) {
+                log.info("Turn finished after DELETE or disconnect; not stored");
+                writer.complete();
+                return;
+            }
+            if (imageAnalysis != null) {
+                session.getAnalyses().add(imageAnalysis);
+            }
+            session.getMessages().addAll(List.of(userMessage, assistant));
+            session.setCurrentDecision(decision);
+            session.setAdditionalPhotoCount(working.getAdditionalPhotoCount());
+            if (input.clientMessageId() != null) {
+                session.getCommittedClientMessageIds().add(input.clientMessageId());
+            }
+            store.save(session);
+            writer.send(SseEventType.DONE, new DoneEvent(assistant.id()));
+            writer.complete();
+            log.info("Chat turn committed label={} changed={} photo={} overriddenBy={}", decision.label(),
+                    decision.changed(), hasPhoto, decision.overriddenBy());
+        }
+        catch (LlmCancelledException e) {
+            if (firstDeltaTimedOut.get()) {
+                fail(writer, StreamErrorEvent.Code.TIMEOUT, "first delta not received before the deadline");
+            }
+            else {
+                log.info("Turn cancelled (client gone or case deleted); nothing committed");
+                writer.complete();
+            }
+        }
+        catch (LlmTimeoutException e) {
+            fail(writer, StreamErrorEvent.Code.TIMEOUT, "timeout");
+        }
+        catch (LlmUnavailableException e) {
+            fail(writer, StreamErrorEvent.Code.AI_UNAVAILABLE, "AI unavailable");
+        }
+        catch (ClientGoneException e) {
+            log.info("Client gone during the turn; nothing committed");
+            token.cancel();
+            writer.complete();
+        }
+        catch (RuntimeException e) {
+            log.error("Turn failed unexpectedly: {}", e.getClass().getName());
+            log.debug("Unexpected turn failure", e);
+            fail(writer, StreamErrorEvent.Code.AI_UNAVAILABLE, "unexpected");
+        }
+        finally {
+            session.getLock().unlock();
+            release(reservation);
+            MDC.remove(AiCallContext.CASE_ID_KEY);
+        }
+    }
+
+    /** The turn's working copy (ADR-002 section 3.4 step 2): the pipeline never mutates the stored session. */
+    static CaseSession workingCopy(CaseSession session) {
+        CaseSession copy = new CaseSession(session.getCaseId(), session.getForm(), session.getCreatedAt());
+        session.getTriage().ifPresent(copy::setTriage);
+        copy.getAnalyses().addAll(session.getAnalyses());
+        copy.getMessages().addAll(session.getMessages());
+        copy.getCommittedClientMessageIds().addAll(session.getCommittedClientMessageIds());
+        copy.setCurrentDecision(session.getCurrentDecision());
+        copy.setAdditionalPhotoCount(session.getAdditionalPhotoCount());
+        return copy;
+    }
+
+    /** The committed user message with this ID and the assistant message that answered it. */
+    static Optional<Replay> replayOf(CaseSession session, UUID clientMessageId) {
+        List<ChatMessage> messages = List.copyOf(session.getMessages());
+        for (int i = 0; i < messages.size() - 1; i++) {
+            ChatMessage m = messages.get(i);
+            if (m.role() == ChatMessage.Role.USER && clientMessageId.equals(m.clientMessageId())) {
+                ChatMessage answer = messages.get(i + 1);
+                if (answer.role() == ChatMessage.Role.ASSISTANT && answer.decisionSnapshot() != null) {
+                    return Optional.of(new Replay(session.getCaseId(), answer.decisionSnapshot(), answer.text(),
+                            answer.id()));
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
     /** DELETE /api/cases/{id}: idempotent; marks the case deleted, removes it and cancels a running turn. */
     public void delete(UUID caseId) {
         RunningTurn turn = running.get(caseId);
@@ -187,8 +394,12 @@ public class CaseService {
         }
     }
 
-    private static DecisionEvent decisionEvent(Decision d) {
-        return new DecisionEvent(d.label(), d.previousLabel(), d.changed(), d.changeReasonPl(), d.safety(),
+    /**
+     * The wire payload. {@code previousLabel} is sent only with {@code changed=true} (ADR-000 section 6:
+     * {@code previousLabel?}); {@link Decision} keeps the label before the turn also when it did not change.
+     */
+    static DecisionEvent decisionEvent(Decision d) {
+        return new DecisionEvent(d.label(), d.changed() ? d.previousLabel() : null, d.changed(), d.changeReasonPl(), d.safety(),
                 d.suggestOtherCaseType(), d.ruleIds());
     }
 

@@ -31,6 +31,12 @@ management:
 app:
   case-ttl: ${CASE_TTL_MINUTES:60}m
   zone: ${APP_ZONE:Europe/Warsaw}
+  # ADR-001 section 3.6 budget; every call is also capped by the 55 s deadline to the decision event
+  timeouts:
+    vision: 20s
+    decision: 30s
+    stream: 60s
+    decision-budget: 55s
 
 openrouter:
   api-key: ${OPENROUTER_API_KEY:}   # required: validated non-blank at startup (OpenRouterProperties)
