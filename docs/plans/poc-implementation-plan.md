@@ -1,10 +1,10 @@
 # Implementation Plan — Hardware Service Decision Copilot PoC (whole application)
 
-> **Status: DRAFT, awaiting review by the product owner/human lead.**
+> **Status: ACCEPTED** by the product owner/human lead on 2026-11-26, after review.
 > **Date:** 2026-11-26 (revised after the independent document review of the same day) · **Author:** orchestrator (Claude Code, Opus 5.5)
 > **Supersedes:** `docs/plans/return-first-decision-implementation-plan.md` (single-slice draft of 2026-11-25). The whole PoC is implemented in one pass.
 >
-> This plan does not authorize execution, new agents, publication or merge. Each phase starts only after an explicit "go".
+> Accepting the plan does not by itself start execution, new agents, publication or merge. Execution begins with T00 after an explicit "go", and each phase starts only after its gate.
 
 ---
 
@@ -513,7 +513,7 @@ No new ADR is needed. Any contradiction found by S-1, S-2 or T10 becomes an ADR 
 
 ## 11. First bounded task and review gate
 
-**Review gate (now):** you review this plan and the revised PRD/ADRs (PR #3). Planning does not authorize execution.
+**Review gate:** passed. The plan was accepted on 2026-11-26. Execution still needs an explicit "go".
 
 **After your "go"** and the §10.1–10.2 decisions, the first bounded task is **T00**:
 1. The base branch contains PR #2 and PR #3.
