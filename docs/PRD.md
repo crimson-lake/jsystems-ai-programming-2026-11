@@ -390,8 +390,9 @@ When more than one rule applies to the same case, the first one in this order de
 
   This is an exception to the "real photos only" rule in `assets/example-images/README.md`. Upload tests, E2E tests, manual QA and AI evals still use only the real example photos, unedited.
 
+- **Photo limit reached while information is still missing** (confirmed by the product owner, 2026-11-26): when the photo limit (AC-33) is reached and the decision is still "Potrzebne dodatkowe informacje", the label stays unchanged. The next steps tell the customer to bring the device to a Store shop for in-person assessment, following the procedures in R5.1 / C6.1. Rule IDs are cited in the message only if they are in the decision's rule list.
+
 ### Assumptions (to confirm)
-- When the photo limit (AC-33) is reached and the decision is still "Potrzebne dodatkowe informacje", the label stays unchanged. The next steps tell the customer to bring the device to a Store shop for in-person assessment (R5.1 / C6.1). *(Proposed 2026-11-26, to be confirmed.)*
 - Limit of 3 additional photos per case and 60 s time to first decision are PoC values chosen to bound cost and waiting time.
 - Purchase date limit of 10 years is a sanity check only.
 - "Today" for date calculations is the server's current date in the Europe/Warsaw time zone.
