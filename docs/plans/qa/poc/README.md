@@ -109,3 +109,24 @@ Screenshots from per-task QA and phase gates (plan §4.5). Each entry gives the 
 | `T34/07-summary-open-390.png` | Open "Szczegóły sprawy" | Summary with thumbnail and badge |
 | `T34/08-new-case-dialog-390.png` | "Nowa sprawa" | Dialog text from PRD §9.3, focus on "Anuluj"; confirming returns an empty form |
 | — | Console | 0 errors, 0 warnings |
+
+## Q3 — Phase 3 gate, dev stack with real OpenRouter (2026-11-26)
+
+- **App commit:** `ae4e781` (dev stack: `spring-boot:run` with the real `.env`, `TRIAGE_MODE=assist` with `typesafe/jev-1.14`, plus the Angular dev server). Logs: `test-results/app-q3.log`, `test-results/app-q3-badkey.log`.
+- **Result:** all 11 checklist items PASS; no functional defect. One UX finding was fixed afterwards in T34 (commit "keep the start of long replies in view"): following a long reply scrolled past its safety block and badge.
+- **Model outputs are recorded, never pre-assumed.**
+
+| Files | Step | Result |
+|---|---|---|
+| `Q3/01-return-*` (1280, 390) | RETURN, `phone-1.jpg`, 10 days | Odrzucone (`R1.1`, `R3.4`, suggests a complaint); summary panel at 390 behind "Szczegóły sprawy" |
+| `Q3/02-complaint-*`, `Q3/03-complaint-ask-date-1280.png` | COMPLAINT, `laptop-1.png`, 200 days; "Jaką datę zakupu podałem?" | Przekazane do specjalisty (`C8`, photo contradicts the reason); reply gives the form date 10.05.2026 (AC-34) |
+| `Q3/04-chat-photo-*` | Chat photo `laptop-2.webp` with text | Decision changed to Potrzebne dodatkowe informacje: "Zmiana decyzji" block with both badges, summary badge updated (AC-35) |
+| `Q3/05-outside-window-*` | RETURN, `phone-2.jpeg`, 45 days | Odrzucone with "45 dni" and "30 dni" and `[R2.3]` (AC-24); triage T2 agreed |
+| `Q3/06-safety-*` (1280, 390) | RETURN, `phone-3.jpeg`, reason "Bateria spuchła i czuć swąd." | Przekazane do specjalisty, safety block first (AC-26), `[R7.1]`; triage T1 agreed |
+| `Q3/07-new-case-*` | "Nowa sprawa" → confirm | Dialog text per PRD §9.3; `DELETE /api/cases/{id}` → 204; empty form |
+| `Q3/08-reload-empty-form-390.png` | Reload with a chat open | `beforeunload` prompt shown; after reload the guard shows the empty form (AC-43) |
+| — | API checks via `page.request` | Replay = `decision, delta, done` with no new `ai.call`; concurrent turns → 409 `CASE_BUSY`; empty text → 400; 4th photo → 422 `PHOTO_LIMIT`; `DELETE` 204 then 404 `CASE_NOT_FOUND` |
+| `Q3/09-error-banner-*` (1280, 390) | Backend with `OPENROUTER_API_KEY=invalid` | Banner "Nie udało się przeanalizować zgłoszenia. Spróbuj ponownie." with "Spróbuj ponownie"; fields and photo kept (AC-40); log: TRIAGE and VISION `status=ERROR` (401), nothing stored |
+| — | Console | No app errors on any page |
+| — | `ai.call` in `app-q3.log` | 50 lines, all `status=OK`: TRIAGE 8 (`typesafe/jev-1.14`), VISION 12 (8 form + 4 chat), DECISION 15, STREAM 15; `DECISION_REASK` not observed |
+| — | Brand | Header `#0D244C`, white logo on navy only, orange CTA `#FF9700` with 8 px radius, navy secondary buttons, Montserrat; no horizontal scroll at 390 and 1280 |
