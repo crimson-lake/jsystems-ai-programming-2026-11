@@ -114,7 +114,7 @@ The router takes the **first** matching row. "All ≥ H" means every listed ques
 Rejections based on photo interpretation (R3.4, C4) and every complaint merits decision always go to the LLM. A wrong automatic rejection is the costliest error for the customer (PRD P2), and AC-27 already forbids rejecting on uncertain causes.
 
 - **`assist` mode:** T1–T5 are evaluated but never taken. The would-be fast-path label is logged against the LLM label.
-- **`fast-path` mode:** T1–T5 are taken.
+- **`fast-path` mode:** T1–T5 are taken. **In the PoC (D-T2 amendment) the value `fast-path` is accepted but routed exactly like `assist`; no templates exist.**
 
 ### 3.6 Fast-path first message
 

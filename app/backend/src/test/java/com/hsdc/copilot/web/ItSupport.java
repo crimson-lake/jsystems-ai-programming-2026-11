@@ -330,13 +330,34 @@ final class ItSupport {
 					.readAllBytes();
 				byte[] capture = new ClassPathResource("openrouter-captures/" + bodyFile).getInputStream().readAllBytes();
 				assertThat(stub).as(bodyFile + " is a verbatim copy of the capture").isEqualTo(capture);
-				assertThat(node.path("response").path("status").asInt())
-					.isEqualTo(MAPPER.readTree(read("openrouter-captures/" + source + ".meta.json")).path("httpStatus").asInt());
+				JsonNode meta = MAPPER.readTree(read("openrouter-captures/" + source + ".meta.json"));
+				assertThat(node.path("response").path("status").asInt()).isEqualTo(meta.path("httpStatus").asInt());
+				node.path("response").path("headers").propertyNames().forEach(header -> assertThat(
+						meta.path("responseHeaders").has(header)).as(mapping.getFilename() + " header " + header).isTrue());
 			}
 			else {
 				assertThat(node.path("response").path("fault").asString()).isEqualTo("CONNECTION_RESET_BY_PEER");
 			}
 		}
+	}
+
+	/**
+	 * T29: the Decisions stubs answer the recorded S-2 requests (RETURN and COMPLAINT, selected by the case type in
+	 * {@code state[0]}) with the verbatim capture bodies.
+	 */
+	static void assertTriageStubsAnswerCapturedRequests(WireMockServer wm, String dir) throws Exception {
+		loadStubs(wm, dir, "triage-return-ok", "triage-complaint-ok");
+		HttpClient client = HttpClient.newHttpClient();
+		for (String capture : new String[] { "decisions-jev-return-phone-1", "decisions-jev-complaint-laptop-1" }) {
+			HttpRequest request = HttpRequest.newBuilder(URI.create(wm.baseUrl() + DECISIONS_PATH))
+				.header("Content-Type", "application/json")
+				.POST(HttpRequest.BodyPublishers.ofString(read("openrouter-captures/" + capture + ".request.json")))
+				.build();
+			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+			assertThat(response.statusCode()).as(capture).isEqualTo(200);
+			assertThat(response.body()).as(capture).isEqualTo(read("openrouter-captures/" + capture + ".json"));
+		}
+		assertThat(decisionsApiRequestCount(wm)).isEqualTo(2);
 	}
 
 	/** Proves the WireMock wiring and the discriminators: the captured requests are answered by the stubs. */

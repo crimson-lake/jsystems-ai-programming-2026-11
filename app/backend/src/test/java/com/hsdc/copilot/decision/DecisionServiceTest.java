@@ -41,6 +41,8 @@ import com.hsdc.copilot.llm.StreamResult;
 import com.hsdc.copilot.policy.PolicyRepository;
 import com.hsdc.copilot.prompts.GuardrailReasons;
 import com.hsdc.copilot.prompts.PromptRepository;
+import com.hsdc.copilot.triage.TriageAnswer;
+import com.hsdc.copilot.triage.TriageResult;
 
 import tools.jackson.databind.json.JsonMapper;
 
@@ -201,5 +203,77 @@ class DecisionServiceTest {
         List<LlmRequest.InputItem> items = request.inputItems();
         assertThat(items.get(items.size() - 1).text()).startsWith(CaseContextAssembler.DECISION_LABEL)
             .contains("\"ruleIds\":[\"R2.2\"]");
+    }
+
+    // ------------------------------------------------------------ T29: triage signals and G1 from triage
+
+    /** A triage result as the domain object (not a wire payload): only safety_hazard, P(true) = 0.6. */
+    private static TriageResult triageWithSafety(double p) {
+        TriageAnswer safety = new TriageAnswer("safety_hazard", TriageAnswer.Type.NOUL, p >= 0.5, p, null,
+                java.util.Map.of("true", p, "false", 1 - p), Math.max(p, 1 - p), true, TriageAnswer.Band.LOW, false);
+        return new TriageResult("typesafe/jev-1.14", java.util.Map.of("safety_hazard", safety), 700, null,
+                TriageResult.Status.OK);
+    }
+
+    @Test
+    void triageSafetyProbabilityAtLeastTheThreshold_escalatesAReturn45DaysOldWithR7_1_viaG1() {
+        CaseSession session = returnCase(45, "Zmiana zdania");
+        session.setTriage(triageWithSafety(0.6));
+        gateway.answers.add(new DecisionResult(Label.REJECTED, List.of("R2.3"), ReasonCode.OUTSIDE_WINDOW,
+                SuggestOtherCaseType.NONE, "", ""));
+
+        Decision d = service.decide(session, FIRST, Deadline.in(Duration.ofSeconds(55)));
+
+        assertThat(d.label()).isEqualTo(Label.ESCALATED);
+        assertThat(d.safety()).isTrue();
+        assertThat(d.ruleIds()).containsExactly("R7.1");
+        assertThat(d.overriddenBy()).isEqualTo("G1");
+        // ADR-004 section 3.4: the signals are in CASE FACTS with answer, confidence and band.
+        String facts = gateway.requests.get(0).inputItems().get(0).text();
+        assertThat(facts).contains("\"triageSignals\":[{\"key\":\"safety_hazard\",\"answer\":true,"
+                + "\"confidence\":0.6,\"band\":\"LOW\"}]");
+    }
+
+    @Test
+    void triageSafetyProbabilityBelowTheThreshold_doesNotEscalate() {
+        CaseSession session = returnCase(45, "Zmiana zdania");
+        session.setTriage(triageWithSafety(0.2));
+        gateway.answers.add(new DecisionResult(Label.REJECTED, List.of("R2.3"), ReasonCode.OUTSIDE_WINDOW,
+                SuggestOtherCaseType.NONE, "", ""));
+
+        Decision d = service.decide(session, FIRST, Deadline.in(Duration.ofSeconds(55)));
+
+        assertThat(d.label()).isEqualTo(Label.REJECTED);
+        assertThat(d.safety()).isFalse();
+    }
+
+    @Test
+    void failedTriage_addsNoSignals() {
+        CaseSession session = returnCase(10, "Zmiana zdania");
+        session.setTriage(new TriageResult(null, java.util.Map.of(), 8000, null, TriageResult.Status.TIMEOUT));
+        gateway.answers.add(result(Label.ACCEPTED_PRELIMINARY, "R2.2"));
+
+        service.decide(session, FIRST, Deadline.in(Duration.ofSeconds(55)));
+
+        assertThat(gateway.requests.get(0).inputItems().get(0).text()).doesNotContain("triageSignals");
+    }
+
+    @Test
+    void photoOnlyChatTurn_sendsTheSameTrustedMarkerToTheDecisionAndTheMessageStep() {
+        CaseSession session = returnCase(10, "Zmiana zdania");
+        gateway.answers.add(result(Label.ACCEPTED_PRELIMINARY, "R2.2"));
+
+        Decision d = service.decide(session, new TurnInput(null, new byte[] { 1 }, UUID.randomUUID()),
+                Deadline.in(Duration.ofSeconds(55)));
+        List<LlmRequest.InputItem> decideItems = gateway.requests.get(0).inputItems();
+        assertThat(decideItems.get(decideItems.size() - 1).text()).isEqualTo(CaseContextAssembler.PHOTO_ONLY_MESSAGE);
+
+        session.getMessages().add(new com.hsdc.copilot.cases.ChatMessage(UUID.randomUUID(),
+                com.hsdc.copilot.cases.ChatMessage.Role.USER, "", UUID.randomUUID(), true, 1, null, false, null,
+                CLOCK.instant()));
+        service.streamMessage(session, d, DecisionService.MessageKind.REPLY, x -> {
+        }, new CancelToken());
+        List<LlmRequest.InputItem> streamItems = gateway.requests.get(1).inputItems();
+        assertThat(streamItems.get(streamItems.size() - 2).text()).isEqualTo(CaseContextAssembler.PHOTO_ONLY_MESSAGE);
     }
 }

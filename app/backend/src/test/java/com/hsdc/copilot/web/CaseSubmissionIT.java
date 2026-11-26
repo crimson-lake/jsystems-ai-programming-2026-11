@@ -40,7 +40,8 @@ import tools.jackson.databind.JsonNode;
 /**
  * T15: SSE/HTTP contract of POST /api/cases (ADR-002 sections 3.5, 5; ADR-000 section 6; TAC-03/04, AC-22, 24, 26, 40, 42).
  * OpenRouter is served by WireMock stubs copied verbatim from the S-1 captures (wiremock/case-submission/**).
- * Triage is off (S-2 failed): no Decisions stubs, zero requests to /api/alpha/decisions are asserted.
+ * Triage runs in assist mode (T29): the recorded Jev Decisions stubs are loaded for every test; one Decisions call
+ * per first submission is asserted.
  * Red until T26: no handler (404) and no CaseStore bean.
  */
 @SpringBootTest
@@ -68,6 +69,8 @@ class CaseSubmissionIT {
 	@BeforeEach
 	void resetStubServer() {
 		wm.resetAll();
+		// T29: triage runs in assist mode (application-test.yml); the recorded Jev answers serve every first submission.
+		loadStubs(wm, DIR, "triage-return-ok", "triage-complaint-ok");
 	}
 
 	private static LocalDate today() {
@@ -91,6 +94,12 @@ class CaseSubmissionIT {
 	@Test
 	void wireMockServesRecordedCapturesAndDiscriminatorsMatch() throws Exception {
 		assertStubServerAnswersCapturedRequests(wm, DIR);
+	}
+
+	@Test
+	void decisionsStubsAnswerTheRecordedTriageRequests() throws Exception {
+		wm.resetAll();
+		assertTriageStubsAnswerCapturedRequests(wm, DIR);
 	}
 
 	@Test
@@ -130,10 +139,11 @@ class CaseSubmissionIT {
 		JsonNode done = events.get(events.size() - 1).data();
 		assertThat(UUID.fromString(done.path("messageId").asString())).isNotNull();
 
-		// One call per step; triage is off; nothing in the outgoing requests that OpenRouter rejects (TAC-001-02).
+		// One call per step; one triage call (assist mode, T29); nothing in the outgoing requests that OpenRouter
+		// rejects (TAC-001-02).
 		assertThat(responsesRequests(wm).stream().map(ItSupport::kindOf).toList())
 			.containsExactly(VISION_KIND, DECISION_KIND, STREAM_KIND);
-		assertThat(decisionsApiRequestCount(wm)).isZero();
+		assertThat(decisionsApiRequestCount(wm)).isEqualTo(1);
 		responsesRequests(wm).forEach(r -> assertThat(r.getBodyAsString()).doesNotContain("\"store\":true")
 			.doesNotContain("previous_response_id"));
 
@@ -180,7 +190,8 @@ class CaseSubmissionIT {
 
 		UUID caseId = caseIdOf(events);
 		assertThat(store().find(caseId)).as("no case after an error (ADR-002 section 5)").isEmpty();
-		assertThat(decisionsApiRequestCount(wm)).isZero();
+		// T29: triage runs first (ADR-004 section 3.1), so the turn made exactly one Decisions call before failing.
+		assertThat(decisionsApiRequestCount(wm)).isEqualTo(1);
 		assertNoInternals(body(result));
 	}
 

@@ -79,6 +79,8 @@ class ChatTurnIT {
 	@BeforeEach
 	void resetStubServer() {
 		wm.resetAll();
+		// T29: triage runs in assist mode (application-test.yml); the recorded Jev answers serve every first submission.
+		loadStubs(wm, DIR, "triage-return-ok", "triage-complaint-ok");
 	}
 
 	private CaseStore store() {
@@ -122,6 +124,12 @@ class ChatTurnIT {
 	@Test
 	void wireMockServesRecordedCapturesAndDiscriminatorsMatch() throws Exception {
 		assertStubServerAnswersCapturedRequests(wm, DIR);
+	}
+
+	@Test
+	void decisionsStubsAnswerTheRecordedTriageRequests() throws Exception {
+		wm.resetAll();
+		assertTriageStubsAnswerCapturedRequests(wm, DIR);
 	}
 
 	@Test

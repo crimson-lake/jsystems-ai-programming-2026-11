@@ -5,13 +5,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-/** TAC-001-06: every gateway stub references an existing capture and is a verbatim copy of it. */
+/**
+ * TAC-001-06 (and plan section 4.5): every WireMock stub, gateway and Decisions API alike, references an existing
+ * capture and is a verbatim copy of it. The IT directories also hold the Decisions stubs added for T29.
+ */
 class GatewayStubsReferenceCapturesTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -22,11 +27,30 @@ class GatewayStubsReferenceCapturesTest {
         }
     }
 
+    private static final String DIRS_NOTE = "stub directories of the unit tests and ITs";
+
     @Test
-    void everyStubReferencesAnExistingCaptureAndCopiesItVerbatim() throws IOException {
+    void gatewayStubsAreComplete() throws IOException {
+        assertThat(new PathMatchingResourcePatternResolver().getResources("classpath:wiremock/gateway/stubs/*.json"))
+                .as("gateway stubs").hasSizeGreaterThanOrEqualTo(8);
+    }
+
+    @Test
+    void theItDirectoriesHoldTheTriageStubs() {
+        for (String dir : new String[] { "case-submission", "chat-turn" }) {
+            for (String stub : new String[] { "triage-return-ok", "triage-complaint-ok" }) {
+                assertThat(new ClassPathResource("wiremock/" + dir + "/stubs/" + stub + ".json").exists())
+                        .as(dir + "/" + stub).isTrue();
+            }
+        }
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = { "gateway", "triage", "case-submission", "chat-turn" })
+    void everyStubReferencesAnExistingCaptureAndCopiesItVerbatim(String dir) throws IOException {
         Resource[] mappings = new PathMatchingResourcePatternResolver()
-                .getResources("classpath:wiremock/gateway/stubs/*.json");
-        assertThat(mappings).as("gateway stubs").hasSizeGreaterThanOrEqualTo(8);
+                .getResources("classpath:wiremock/" + dir + "/stubs/*.json");
+        assertThat(mappings).as(DIRS_NOTE).isNotEmpty();
 
         for (Resource mapping : mappings) {
             JsonNode node = JSON.readTree(new String(mapping.getInputStream().readAllBytes(), StandardCharsets.UTF_8));
@@ -42,7 +66,7 @@ class GatewayStubsReferenceCapturesTest {
                 continue;
             }
             assertThat(bodyFile).as(name).startsWith(source);
-            assertThat(bytes("wiremock/gateway/__files/" + bodyFile)).as(name + " body is a verbatim copy")
+            assertThat(bytes("wiremock/" + dir + "/__files/" + bodyFile)).as(name + " body is a verbatim copy")
                     .isEqualTo(bytes("openrouter-captures/" + bodyFile));
             JsonNode meta = JSON.readTree(new String(bytes("openrouter-captures/" + source + ".meta.json"),
                     StandardCharsets.UTF_8));
@@ -53,10 +77,11 @@ class GatewayStubsReferenceCapturesTest {
         }
     }
 
-    @Test
-    void onlyTransportFaultsAreAddedToStubs() throws IOException {
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = { "gateway", "triage", "case-submission", "chat-turn" })
+    void onlyTransportFaultsAreAddedToStubs(String dir) throws IOException {
         Resource[] mappings = new PathMatchingResourcePatternResolver()
-                .getResources("classpath:wiremock/gateway/stubs/*.json");
+                .getResources("classpath:wiremock/" + dir + "/stubs/*.json");
         for (Resource mapping : mappings) {
             JsonNode node = JSON.readTree(new String(mapping.getInputStream().readAllBytes(), StandardCharsets.UTF_8));
             String addition = node.path("metadata").path("addition").asString();

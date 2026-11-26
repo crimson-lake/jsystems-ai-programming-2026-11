@@ -1,0 +1,37 @@
+{
+  "name": "triage-complaint-ok",
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/alpha/decisions",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.state[0][?(@.caseType == 'COMPLAINT')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "access-control-allow-origin": "*",
+      "access-control-expose-headers": "WWW-Authenticate,PAYMENT-REQUIRED,Payment-Receipt,PAYMENT-RESPONSE,Location,X-Generation-Id,x-openrouter-error-origin,x-openrouter-error-tool,X-Provider-Name,request-id,x-openrouter-subscription-passthrough,anthropic-ratelimit-unified-status,Retry-After,cf-ray",
+      "alt-svc": "h3=\":443\"; ma=86400",
+      "cf-ray": "a6087a09cdc11b0b-WAW",
+      "content-type": "application/json",
+      "date": "Thu, 26 Nov 2026 11:15:42 GMT",
+      "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+      "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+      "server": "cloudflare",
+      "server-timing": "cfEdge;dur=58,cfOrigin;dur=0,cfWorker;dur=350",
+      "x-content-type-options": "nosniff",
+      "x-generation-id": "gen-dec-1795691741-j1rydUVqJE4W3Wg7WYr5",
+      "x-provider-name": "TypeSafe"
+    },
+    "bodyFileName": "decisions-jev-complaint-laptop-1.json"
+  },
+  "metadata": {
+    "source": "decisions-jev-complaint-laptop-1",
+    "sourceFile": "openrouter-captures/decisions-jev-complaint-laptop-1.meta.json",
+    "note": "verbatim from capture; the body pattern selects the case type",
+    "addition": "none"
+  }
+}

@@ -85,3 +85,10 @@ Screenshots from per-task QA and phase gates (plan §4.5). Each entry gives the 
 - **Checks via `playwright-cli` `run-code`:** a text turn ("Jaką datę zakupu podałem?"); a photo turn (`VISION` in the log); the same `clientMessageId` again → replay (`decision`, one `delta`, `done`, no `ai.call`); two concurrent turns → one 409 `CASE_BUSY`; `DELETE` → 204, then a message → 404 `CASE_NOT_FOUND`; 3 committed photo turns then a 4th → 422 `PHOTO_LIMIT`; empty text without photo → 400; an 11.6 MB photo part → 413.
 - **`ai.call` lines** (`test-results/app-t27.log`, model `openai/gpt-6-luna`): all steps OK except one chat-turn `DECISION status=TIMEOUT latencyMs=20033` (nothing committed; the retry succeeded). Chat-turn decisions took 12–17 s, so the per-call decision timeout was raised to 30 s (still capped by the 55 s deadline; ADR-001 §3.6 amended).
 - **Recordings:** `chat-text.sse`, `chat-photo.sse`, `chat-replay.sse`, `chat-error-timeout.sse`, `http-400/404/409/413/422.json` in `app/frontend/src/testing/captures/`.
+
+## T29 — Triage wiring, real-API probe (2026-11-26)
+
+- **App commit:** the T29 commit (`spring-boot:run`, default `TRIAGE_MODE=assist`, model `typesafe/jev-1.14`). API-only task.
+- **RETURN, `phone-1.jpg`, 10 days:** 200, 23.4 s; `ai.call` TRIAGE OK 928 ms (3916/233), VISION OK 10943 ms, DECISION OK 4235 ms, STREAM OK 6637 ms; `triage.agreement ruleId=T6 … llmLabel=REJECTED status=OK`.
+- **COMPLAINT, `phone-3.jpeg`, 200 days:** 200, 36.7 s; TRIAGE OK 272 ms, VISION OK 7051 ms, DECISION OK 18310 ms, STREAM OK 11007 ms; `triage.agreement ruleId=T6 … llmLabel=NEEDS_MORE_INFO status=OK`.
+- The model's labels are recorded, not pre-assumed. Chat turns make no Decisions call (IT-proven).

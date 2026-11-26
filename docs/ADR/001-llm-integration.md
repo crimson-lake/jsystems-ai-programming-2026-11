@@ -81,7 +81,7 @@ The OpenRouter Responses API is **stateless**: "You must include the full conver
 | Instructions | `instructions` | The prompt file for the step with `{{policy}}` filled in. Policies are sent only to the decision and message steps, never to the vision step |
 | Case facts | first `input` item, role `user`, labelled `CASE FACTS (system-computed, trusted)` | `caseType`, `category`, `model`, `purchaseDate`, `today`, `daysSincePurchase`, window flags, `triageSignals` (decisions-model answers with confidence and HIGH/MEDIUM/LOW band, ADR-004 §3.4; given to the vision and decision steps as hypotheses to verify), all `ImageAnalysis` objects as JSON with their index and time |
 | Customer form text | `input` item, role `user`, labelled `CUSTOMER REASON (untrusted)` | The `reason` field |
-| History | following `input` items | Prior turns in order: customer → role `user`, assistant body → role `assistant` |
+| History | following `input` items | Prior turns in order: customer → role `user`, assistant body → role `assistant`. A chat turn with a photo and no text is represented by the trusted marker `CUSTOMER MESSAGE (system-generated, trusted): photo attached, no text` (added 2026-11-26, T29) |
 | Current decision | final `input` item (message steps only) | The validated `Decision` the message must explain, plus `changed`/`previousLabel` |
 | Image | `input_image` part (vision step only) | `data:image/jpeg;base64,…` of the reduced photo. The text part comes first, then the image (OpenRouter image guide) |
 

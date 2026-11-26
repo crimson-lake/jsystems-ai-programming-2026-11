@@ -22,6 +22,7 @@ import com.hsdc.copilot.analysis.ImageAnalysisService;
 import com.hsdc.copilot.cases.CaseService.Replay;
 import com.hsdc.copilot.cases.CaseService.Reservation;
 import com.hsdc.copilot.cases.CaseService.TurnStart;
+import com.hsdc.copilot.config.TriageProperties;
 import com.hsdc.copilot.decision.Decision;
 import com.hsdc.copilot.decision.DecisionResult.Label;
 import com.hsdc.copilot.decision.DecisionResult.ReasonCode;
@@ -115,7 +116,10 @@ class CaseServiceTurnTest {
     private final CaffeineCaseStore store = new CaffeineCaseStore(Duration.ofMinutes(60));
     private final FakeAnalysis analysis = new FakeAnalysis();
     private final FakeDecisions decisions = new FakeDecisions();
-    private final CaseService service = new CaseService(store, analysis, decisions, CLOCK, Duration.ofSeconds(55));
+    private final TriageStage triageOff = new TriageStage(null, null, null, new TriageProperties(TriageProperties.Mode.OFF,
+            "test/triage-model", 0.80, 0.95, 0.30, "http://localhost:0", Duration.ofSeconds(8)), CLOCK);
+    private final CaseService service = new CaseService(store, analysis, decisions, triageOff, CLOCK,
+            Duration.ofSeconds(55));
     private final JsonMapper json = JsonMapper.builder().build();
 
     static ImageAnalysis analysis() {

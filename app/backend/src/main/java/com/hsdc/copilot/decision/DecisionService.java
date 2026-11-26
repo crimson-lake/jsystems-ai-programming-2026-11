@@ -95,7 +95,7 @@ public class DecisionService {
         String instructions = prompts.render(type == CaseType.RETURN ? "decision-return" : "decision-complaint",
                 Map.of("policy", policies.text(type)));
         List<InputItem> items = baseItems(session);
-        if (input != null && hasText(input.text())) {
+        if (input != null && (hasText(input.text()) || input.photoJpeg() != null)) {
             items.add(context.customerMessage(input.text(), input.photoJpeg() != null));
         }
 

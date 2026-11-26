@@ -8,8 +8,9 @@ import java.util.regex.Pattern;
 /**
  * Safety wording of G1 (ADR-001 section 3.4). Text is lower-cased and stripped of diacritics before matching.
  * A word ending in {@code *} is a stem (any word starting with it); other words must match a whole word.
+ * Public for the triage router's caller (ADR-004 section 3.5, T1), which passes the match of the form reason.
  */
-final class SafetyLexicon {
+public final class SafetyLexicon {
 
 	private static final List<String> ENTRIES = List.of("spuch*", "napuch*", "puchnie", "wybrzusz*", "dym*", "iskr*",
 			"przypal*", "nadpal*", "spalon*", "spalenizn*", "swad*", "pali sie", "zapalil*", "ogien", "pozar",
@@ -20,7 +21,7 @@ final class SafetyLexicon {
 	private SafetyLexicon() {
 	}
 
-	static boolean matches(String text) {
+	public static boolean matches(String text) {
 		String normalized = normalize(text);
 		return PATTERNS.stream().anyMatch(p -> p.matcher(normalized).find());
 	}

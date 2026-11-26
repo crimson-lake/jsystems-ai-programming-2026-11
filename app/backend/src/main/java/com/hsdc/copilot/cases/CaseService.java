@@ -53,6 +53,7 @@ public class CaseService {
     private final CaseStore store;
     private final ImageAnalysisService analysis;
     private final DecisionService decisions;
+    private final TriageStage triage;
     private final Clock clock;
     private final Duration decisionBudget;
     private final Map<UUID, RunningTurn> running = new ConcurrentHashMap<>();
@@ -86,11 +87,12 @@ public class CaseService {
         }
     }
 
-    public CaseService(CaseStore store, ImageAnalysisService analysis, DecisionService decisions, Clock clock,
-            @Value("${app.timeouts.decision-budget:55s}") Duration decisionBudget) {
+    public CaseService(CaseStore store, ImageAnalysisService analysis, DecisionService decisions, TriageStage triage,
+            Clock clock, @Value("${app.timeouts.decision-budget:55s}") Duration decisionBudget) {
         this.store = store;
         this.analysis = analysis;
         this.decisions = decisions;
+        this.triage = triage;
         this.clock = clock;
         this.decisionBudget = decisionBudget;
     }
@@ -110,10 +112,14 @@ public class CaseService {
             send(writer, SseEventType.CASE, new CaseCreatedEvent(caseId));
             progress(writer, Step.UPLOAD_RECEIVED);
             progress(writer, Step.ANALYZING_PHOTO);
+            // ADR-004 section 3.1: triage of the form photo only, inside the 55 s budget (ADR-001 section 3.6).
+            TriageStage.Outcome triaged = triage.run(form, photo);
+            triaged.result().ifPresent(working::setTriage);
             ImageAnalysis imageAnalysis = analysis.analyze(working, photo, deadline);
             working.getAnalyses().add(imageAnalysis);
             progress(writer, Step.PREPARING_DECISION);
             Decision decision = decisions.decide(working, new TurnInput(null, null, null), deadline);
+            triage.logAgreement(working, triaged, decision.label());
             deadline.check();
             send(writer, SseEventType.DECISION, decisionEvent(decision));
             progress(writer, Step.WRITING_REPLY);

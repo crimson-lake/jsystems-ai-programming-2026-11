@@ -35,6 +35,7 @@ public class CaseContextAssembler {
     public static final String CUSTOMER_REASON_LABEL = "CUSTOMER REASON (untrusted)";
     public static final String CUSTOMER_MESSAGE_LABEL = "CUSTOMER MESSAGE (untrusted)";
     public static final String DECISION_LABEL = "DECISION (final, trusted)";
+    public static final String PHOTO_ONLY_MESSAGE = "CUSTOMER MESSAGE (system-generated, trusted): photo attached, no text";
     public static final int PHOTO_LIMIT = 3;
 
     private final Clock clock;
@@ -95,7 +96,14 @@ public class CaseContextAssembler {
         return items;
     }
 
+    /**
+     * A customer chat message. A photo-only message (no text) becomes the trusted marker
+     * {@value #PHOTO_ONLY_MESSAGE}, the same in the decision and the message steps.
+     */
     public InputItem customerMessage(String text, boolean hasPhoto) {
+        if (hasPhoto && (text == null || text.isBlank())) {
+            return text(Role.USER, PHOTO_ONLY_MESSAGE);
+        }
         String body = text == null ? "" : text;
         return text(Role.USER, CUSTOMER_MESSAGE_LABEL + (hasPhoto ? " [photo attached]" : "") + "\n" + body);
     }
@@ -145,7 +153,7 @@ public class CaseContextAssembler {
             }
             Map<String, Object> s = new LinkedHashMap<>();
             s.put("key", answer.key());
-            s.put("value", answer.value());
+            s.put("answer", answer.value());
             s.put("confidence", answer.confidence());
             s.put("band", answer.band());
             signals.add(s);
