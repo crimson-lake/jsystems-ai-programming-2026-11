@@ -32,3 +32,12 @@ Screenshots from per-task QA and phase gates (plan §4.5). Each entry gives the 
 | `Q1/03-placeholder-390.png` | Same at 390 px | No horizontal scroll, heading wraps |
 | — | `run-code`: `GET :4200/api/does-not-exist` | **Defect found and fixed:** the first run returned a JSON 404 **with a stack trace**, because DevTools forces `include-stacktrace=always`. With `spring.devtools.add-properties=false` the body is `{"timestamp","status":404,"error":"Not Found","path"}`, which proves the proxy reaches the backend without leaking internals (AC-42) |
 | — | Console | 0 errors, 0 warnings |
+
+## T30 — Theme and app shell (2026-11-26)
+
+- **App commit:** the T30 commit (frontend only, dev server).
+
+| File | Step | Result |
+|---|---|---|
+| `T30/01-shell-1280.png` | `npm start`, 1280 px | Navy header (`--app-header-bg`), white logo 178×45 at the left, title and subtitle in white Montserrat; matches the header of `assets/homepage.png` |
+| `T30/02-shell-390.png` | Same at 390 px | Title and subtitle stack under the logo with no overlap (the reference site's overlap bug is not copied) |

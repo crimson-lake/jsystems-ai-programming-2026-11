@@ -1,5 +1,6 @@
 @use '@angular/material' as mat;
 @use './theme-colors' as theme;
+@use './styles/tokens' as tokens;
 @use '@fontsource/montserrat/latin-ext-100.css';
 @use '@fontsource/montserrat/latin-ext-200.css';
 @use '@fontsource/montserrat/latin-ext-300.css';
@@ -8,11 +9,14 @@
 @use '@fontsource/montserrat/latin-ext-600.css';
 @use '@fontsource/montserrat/latin-ext-700.css';
 @use '@fontsource/montserrat/latin-100.css';
+@use '@fontsource/montserrat/latin-200.css';
+@use '@fontsource/montserrat/latin-300.css';
 @use '@fontsource/montserrat/latin-400.css';
 @use '@fontsource/montserrat/latin-500.css';
+@use '@fontsource/montserrat/latin-600.css';
 @use '@fontsource/montserrat/latin-700.css';
 
-// Minimal theme from `ng generate @angular/material:theme-color` (full brand theme: T30).
+// Brand theme: palettes from `ng generate @angular/material:theme-color`, exact hex via overrides (ADR-003 3.2).
 html {
   height: 100%;
   @include mat.theme(
@@ -32,6 +36,46 @@ html {
       density: 0,
     )
   );
+  @include mat.theme-overrides(
+    (
+      primary: tokens.$primary,
+      on-primary: tokens.$on-primary,
+      tertiary: tokens.$tertiary,
+      on-tertiary: tokens.$on-tertiary,
+      surface: tokens.$surface,
+      surface-container-low: tokens.$surface-container-low,
+      on-surface-variant: tokens.$on-surface-variant,
+      outline-variant: tokens.$outline-variant,
+      error: tokens.$error,
+    )
+  );
+  @include mat.button-overrides(
+    (
+      filled-container-shape: tokens.$radius,
+      outlined-container-shape: tokens.$radius,
+      protected-container-shape: tokens.$radius,
+      text-container-shape: tokens.$radius,
+      tonal-container-shape: tokens.$radius,
+    )
+  );
+  @include mat.card-overrides(
+    (
+      elevated-container-shape: tokens.$radius,
+      outlined-container-shape: tokens.$radius,
+      filled-container-shape: tokens.$radius,
+    )
+  );
+  @include mat.dialog-overrides(
+    (
+      container-shape: tokens.$radius,
+    )
+  );
+  @include mat.form-field-overrides(
+    (
+      outlined-container-shape: tokens.$radius,
+      filled-container-shape: tokens.$radius,
+    )
+  );
 }
 
 body {
@@ -41,4 +85,28 @@ body {
   font: var(--mat-sys-body-medium);
   margin: 0;
   height: 100%;
+}
+
+.mat-mdc-button-base {
+  text-transform: none;
+}
+
+// Primary CTA: filled orange (tertiary).
+.app-cta.mat-mdc-button-base {
+  --mat-button-filled-container-color: var(--mat-sys-tertiary);
+  --mat-button-filled-label-text-color: var(--mat-sys-on-tertiary);
+  --mat-button-filled-container-height: 48px;
+  --mat-button-filled-horizontal-padding: 40px;
+  padding: 10px 40px;
+  height: 48px;
+  font-size: 16px;
+  font-weight: 400;
+}
+
+// Secondary: filled navy (primary).
+.app-secondary.mat-mdc-button-base {
+  --mat-button-filled-container-color: var(--mat-sys-primary);
+  --mat-button-filled-label-text-color: var(--mat-sys-on-primary);
+  --mat-button-filled-horizontal-padding: 40px;
+  padding: 10px 40px;
 }

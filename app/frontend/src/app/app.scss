@@ -1,5 +1,46 @@
-.placeholder {
-  padding: 32px 16px;
-  text-align: center;
-  color: var(--mat-sys-primary);
+.app-header {
+  background-color: var(--app-header-bg);
+  color: var(--mat-sys-on-primary);
+}
+
+.app-header__inner {
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+  max-width: var(--app-content-width);
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.app-header__logo {
+  display: block;
+  flex: none;
+  width: 178px;
+  height: 45px;
+}
+
+.app-header__text {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.app-header__title {
+  margin: 0;
+  font: var(--mat-sys-title-medium);
+  font-weight: 700;
+}
+
+.app-header__subtitle {
+  margin: 4px 0 0;
+  font: var(--mat-sys-body-medium);
+}
+
+.app-main {
+  display: block;
+  box-sizing: border-box;
+  max-width: var(--app-content-width);
+  margin: 0 auto;
+  padding: 24px 16px;
 }
