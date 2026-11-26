@@ -22,6 +22,7 @@ Chat in Polish unless the user asks for another language. Repository documentati
 ```
 app/                 Application built during the course (start: empty scaffold)
 assets/              Design tokens, logo, favicon
+  example-images/    Real device photos for upload/E2E tests and manual QA (read its README rules: never pre-assume what the model sees)
 docs/                PRD, ADR, design system
 course-materials/    Notes, scripts, examples, research
 ```

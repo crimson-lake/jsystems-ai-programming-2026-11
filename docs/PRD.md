@@ -382,6 +382,13 @@ When more than one rule applies to the same case, the first one in this order de
 - **Return safety:** the Return Policy gains rule R7.1 (safety), mirroring C7.1. Safety escalations of returns cite R7.1.
 - **Manual QA:** a short manual check of the running app follows every task that changes it. A full QA with brand comparison closes the implementation.
 - **AI budget:** OpenRouter spend for building the PoC is capped at $2, with the fallback cuts defined in the implementation plan.
+- **Test fixture exception:** *unit tests of the photo validator and reducer only* may use byte-level fixtures:
+  - file headers of other formats (GIF, HEIC);
+  - a renamed text file;
+  - an empty file;
+  - content sized just over 10 MB, built in memory.
+
+  This is an exception to the "real photos only" rule in `assets/example-images/README.md`. Upload tests, E2E tests, manual QA and AI evals still use only the real example photos, unedited.
 
 ### Assumptions (to confirm)
 - When the photo limit (AC-33) is reached and the decision is still "Potrzebne dodatkowe informacje", the label stays unchanged. The next steps tell the customer to bring the device to a Store shop for in-person assessment (R5.1 / C6.1). *(Proposed 2026-11-26, to be confirmed.)*
