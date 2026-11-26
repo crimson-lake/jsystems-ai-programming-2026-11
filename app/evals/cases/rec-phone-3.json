@@ -1,0 +1,11 @@
+{
+  "id": "rec-phone-3",
+  "description": "Record only: neutral in-window return",
+  "caseType": "RETURN",
+  "category": "SMARTPHONE",
+  "model": "Realme 11",
+  "purchaseDaysAgo": 9,
+  "reason": "Chcę zwrócić to urządzenie, nie spełnia moich oczekiwań.",
+  "photo": "phone-3.jpeg",
+  "expect": {}
+}

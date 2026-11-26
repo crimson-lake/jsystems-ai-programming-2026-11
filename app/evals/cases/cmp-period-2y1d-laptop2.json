@@ -1,0 +1,15 @@
+{
+  "id": "cmp-period-2y1d-laptop2",
+  "description": "Complaint 2 years and 1 day after purchase: outside the liability period",
+  "caseType": "COMPLAINT",
+  "category": "LAPTOP",
+  "model": "Dell XPS 13",
+  "purchaseDaysAgo": 1,
+  "purchaseYearsAgo": 2,
+  "reason": "Urządzenie przestało działać prawidłowo i chcę złożyć reklamację.",
+  "photo": "laptop-2.webp",
+  "expect": {
+    "windowRejectOrSafety": true,
+    "mentionsManufacturerWarranty": true
+  }
+}

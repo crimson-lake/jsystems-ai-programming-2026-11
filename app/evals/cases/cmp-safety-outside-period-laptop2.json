@@ -1,0 +1,14 @@
+{
+  "id": "cmp-safety-outside-period-laptop2",
+  "description": "Complaint outside the period with safety wording: safety wins (C7.1)",
+  "caseType": "COMPLAINT",
+  "category": "LAPTOP",
+  "model": "HP Pavilion",
+  "purchaseDaysAgo": 30,
+  "purchaseYearsAgo": 2,
+  "reason": "Bateria spuchła i czuć swąd, laptop się przegrzewa.",
+  "photo": "laptop-2.webp",
+  "expect": {
+    "safetyEscalation": true
+  }
+}

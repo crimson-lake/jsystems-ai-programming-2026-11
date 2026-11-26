@@ -1,0 +1,11 @@
+{
+  "id": "rec-phone-1",
+  "description": "Record only: neutral in-window return",
+  "caseType": "RETURN",
+  "category": "SMARTPHONE",
+  "model": "OnePlus 11",
+  "purchaseDaysAgo": 8,
+  "reason": "Chcę zwrócić to urządzenie, nie spełnia moich oczekiwań.",
+  "photo": "phone-1.jpg",
+  "expect": {}
+}

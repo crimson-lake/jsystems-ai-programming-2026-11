@@ -1,0 +1,13 @@
+{
+  "id": "cmp-safety-sparks-phone3",
+  "description": "Complaint in period with safety wording",
+  "caseType": "COMPLAINT",
+  "category": "SMARTPHONE",
+  "model": "Xiaomi 13",
+  "purchaseDaysAgo": 200,
+  "reason": "Z ładowarki poszły iskry i był dym, telefon się nie włącza.",
+  "photo": "phone-3.jpeg",
+  "expect": {
+    "safetyEscalation": true
+  }
+}

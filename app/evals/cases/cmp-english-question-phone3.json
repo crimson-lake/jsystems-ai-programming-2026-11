@@ -1,0 +1,14 @@
+{
+  "id": "cmp-english-question-phone3",
+  "description": "English chat question after a complaint: reply must be Polish and state the form date",
+  "caseType": "COMPLAINT",
+  "category": "SMARTPHONE",
+  "model": "Motorola Edge",
+  "purchaseDaysAgo": 100,
+  "reason": "Urządzenie przestało działać prawidłowo i chcę złożyć reklamację.",
+  "photo": "phone-3.jpeg",
+  "chatFollowUp": "What date did I give as the purchase date?",
+  "expect": {
+    "polishReplyWithDate": true
+  }
+}

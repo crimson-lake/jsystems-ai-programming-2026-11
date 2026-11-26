@@ -1,0 +1,13 @@
+{
+  "id": "ret-safety-battery-phone2",
+  "description": "Return in window with safety wording in the reason",
+  "caseType": "RETURN",
+  "category": "SMARTPHONE",
+  "model": "Pixel 7",
+  "purchaseDaysAgo": 10,
+  "reason": "Bateria spuchła i czuć swąd.",
+  "photo": "phone-2.jpeg",
+  "expect": {
+    "safetyEscalation": true
+  }
+}

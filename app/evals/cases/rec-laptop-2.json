@@ -1,0 +1,11 @@
+{
+  "id": "rec-laptop-2",
+  "description": "Record only: neutral in-window return",
+  "caseType": "RETURN",
+  "category": "LAPTOP",
+  "model": "Huawei MateBook",
+  "purchaseDaysAgo": 10,
+  "reason": "Chcę zwrócić to urządzenie, nie spełnia moich oczekiwań.",
+  "photo": "laptop-2.webp",
+  "expect": {}
+}
