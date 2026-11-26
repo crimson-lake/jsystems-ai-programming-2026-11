@@ -41,3 +41,19 @@ Screenshots from per-task QA and phase gates (plan §4.5). Each entry gives the 
 |---|---|---|
 | `T30/01-shell-1280.png` | `npm start`, 1280 px | Navy header (`--app-header-bg`), white logo 178×45 at the left, title and subtitle in white Montserrat; matches the header of `assets/homepage.png` |
 | `T30/02-shell-390.png` | Same at 390 px | Title and subtitle stack under the logo with no overlap (the reference site's overlap bug is not copied) |
+
+## Q2 — Phase 2 gate (2026-11-26)
+
+- **App commit:** `03d64cf` (dev stack: `spring-boot:run` + `npm start`).
+- **Red runs (uncommitted tests, failing for the expected reason):**
+  - T15 `CaseSubmissionIT`: 14 run, 12 failed with `expected 200/400 but was 404` (no `/api/cases` handler); the 2 sanity tests (WireMock serves the verbatim captures; every stub is a capture) pass.
+  - T16 `ChatTurnIT`: 12 run, 9 failed with 404; 3 sanity tests pass.
+  - T17 Playwright suite against the placeholder: 16 failed on missing elements (`Wyślij zgłoszenie` not found), none on compile errors.
+
+| File | Step | Result |
+|---|---|---|
+| `Q2/01-health-1280.png` | `:8080/actuator/health` | UP |
+| `Q2/02-shell-1280.png` | `:4200` at 1280 px | App shell with the navy header |
+| `Q2/03-shell-390.png` | Same at 390 px | Header stacks, no overlap |
+| — | `GET :4200/api/does-not-exist` | JSON 404 without internals (proxy works) |
+| — | Console | 0 errors, 0 warnings |
