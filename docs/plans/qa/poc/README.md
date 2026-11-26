@@ -153,3 +153,25 @@ Screenshots from per-task QA and phase gates (plan §4.5). Each entry gives the 
 - **Specs (each at 360 and 1280 px unless noted):** return-happy, outside-window, safety-wording, complaint-followup, chat-photo-new-case, error-banner, keyboard, no-horizontal-scroll (360/390/768/1280/1920 in one test), actuator health.
 - **Coverage teardown (runs 2 and 3), "proof OK":** `POST /api/cases` 15, chat text-only 2, chat with photo 2, `DELETE` → 204 2, `GET /actuator/health` 1; `ai.call` with `status=OK`: TRIAGE 13, VISION 15 (form and chat on the same case), DECISION 17, STREAM 17; `DECISION_REASK` not observed.
 - **No app defects.** Changes were limited to `app/e2e` selectors, waits and the network logger (Chromium hides multipart bodies that contain a File, so a null body is logged as a photo part).
+
+## T42 = Q4 — Full manual QA on the packaged JAR (2026-11-26)
+
+- **App commit:** `a2c3abe` (final JAR after the T50 review fixes; copied to a private path; real OpenRouter on `:8080`, invalid key on `:8081`). Startup 8.5–12.2 s.
+- **E2E re-run (T50 verification):** 16/16 passed in 5.3 min; coverage teardown "proof OK" (TRIAGE 13, VISION 15 incl. form + chat, DECISION 17, STREAM 17; every endpoint; `DECISION_REASK` not observed).
+- **Manual checklist (35 screenshots in `Q4/`, 390 and 1280 px): all PASS, no functional defect.**
+
+| Files | Step | Result |
+|---|---|---|
+| `Q4/01-form-empty-*`, `02-form-validation-*`, `03-form-filled-*`, `04-form-progress-*` | Form states | Polish errors, photo thumbnail, progress steps |
+| `Q4/05-chat-phone-1-1280`, `05-chat-phone-2-390`, `06-chat-laptop-1-1280`, `07-chat-laptop-2-390`, `08-chat-phone-3-1280` | Chat for each of the 5 example photos | Labels recorded (not pre-assumed): Odrzucone, Potrzebne dodatkowe informacje, Potrzebne dodatkowe informacje (another run: Przekazane do specjalisty), Wstępnie przyjęte, Przekazane do specjalisty |
+| `Q4/09-outside-window-*` | RETURN 45 days ago | Odrzucone, "45 dni … 30 dni [R2.3]" |
+| `Q4/10-safety-wording-*` | Safety reason | Przekazane do specjalisty; safety block first and visible at the top after the reply completes |
+| `Q4/11`–`14-followup-*` | Chat follow-up with `laptop-2.webp` | Decision unchanged, no "Zmiana decyzji" block (the changed case was shown in Q3) |
+| `Q4/15-new-case-dialog-*`, `16-after-new-case-empty-form-1280` | "Nowa sprawa" | Focus on "Anuluj"; confirm → empty form; `DELETE` → 204 |
+| `Q4/17-error-banner-*` | Invalid-key instance | Banner + "Spróbuj ponownie", data and photo kept. **Finding:** at 390 px the retry button was below the fold → fixed (banner scrolled into view and focused) |
+| `Q4/19-chat-409-*`, `Q4/20-chat-404-expired-*` | 409 / 404 via API while the chat is open | 409 `CASE_BUSY` for the concurrent request; after `DELETE`, a UI message shows "Ta sprawa wygasła. Rozpocznij nową sprawę." with "Nowa sprawa" |
+| `Q4/21-console-pass-*` | Console + scroll | 0 errors/warnings; no horizontal scroll at 390 and 1280 |
+| — | Brand | Header `#0D244C`, CTA `#FF9700` with white text, navy outline secondary, Montserrat, 8 px radius, logo on navy only; matches `assets/homepage*.png` |
+| — | `ai.call` (`q4.log`) | 64 lines, all OK: TRIAGE 15 (`typesafe/jev-1.14`), VISION 16 (form + chat), DECISION 17, STREAM 16 |
+
+- **Second finding:** a client disconnect on an SSE stream was logged as an unhandled ERROR with a stack trace → fixed (logged at DEBUG).
