@@ -29,10 +29,8 @@ app:
   case-ttl: ${CASE_TTL_MINUTES:60}m
   zone: ${APP_ZONE:Europe/Warsaw}
 
-# Placeholders with defaults so the app starts without a key.
-# T14 replaces them with typed @ConfigurationProperties (required, validated non-blank).
 openrouter:
-  api-key: ${OPENROUTER_API_KEY:}
+  api-key: ${OPENROUTER_API_KEY:}   # required: validated non-blank at startup (OpenRouterProperties)
   base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}
   vision-model: ${LLM_VISION_MODEL:${LLM_MODEL:}}
   decision-model: ${LLM_DECISION_MODEL:${LLM_MODEL:}}
@@ -41,7 +39,7 @@ openrouter:
   app-url: ${OPENROUTER_APP_URL:http://localhost:8080}
 
 triage:
-  mode: ${TRIAGE_MODE:assist}
+  mode: ${TRIAGE_MODE:off}   # S-2 failed on 2026-11-26 (plan F1, ADR-004 Q-T1)
   model: ${LLM_TRIAGE_MODEL:openai/gpt-6-luna-decisions}
   low-confidence: ${TRIAGE_LOW_CONFIDENCE:0.80}
   high-confidence: ${TRIAGE_HIGH_CONFIDENCE:0.95}

@@ -1,0 +1,34 @@
+{
+  "name" : "decisions-complaint-laptop-1",
+  "description" : "S-2: COMPLAINT, laptop-1.png (unedited, JPEG content, 1.2 MB) as jpeg asset",
+  "capturedAt" : "2026-11-26T10:14:09.365636100Z",
+  "endpoint" : "POST https://openrouter.ai/api/alpha/decisions",
+  "model" : "openai/gpt-6-luna-decisions",
+  "requestSummary" : "state=[facts object, asset UUID], assets=1 jpeg, 9 questions incl. damage_type and likely_cause",
+  "httpStatus" : 401,
+  "latencyMs" : 609,
+  "bodyFile" : "decisions-complaint-laptop-1.json",
+  "requestFile" : "decisions-complaint-laptop-1.request.json",
+  "note" : "Authorization, Cookie and Set-Cookie headers are not stored. Body file is verbatim.",
+  "requestHeaders" : {
+    "content-type" : "application/json",
+    "http-referer" : "http://localhost:8080",
+    "x-openrouter-title" : "Hardware Service Decision Copilot PoC"
+  },
+  "responseHeaders" : {
+    ":status" : "401",
+    "access-control-allow-origin" : "*",
+    "access-control-expose-headers" : "WWW-Authenticate,PAYMENT-REQUIRED,Payment-Receipt,PAYMENT-RESPONSE,Location,X-Generation-Id,x-openrouter-error-origin,x-openrouter-error-tool,X-Provider-Name,request-id,x-openrouter-subscription-passthrough,anthropic-ratelimit-unified-status,Retry-After,cf-ray",
+    "alt-svc" : "h3=\":443\"; ma=86400",
+    "cf-ray" : "a6081fe02eed0d20-WAW",
+    "content-type" : "application/json",
+    "date" : "Thu, 26 Nov 2026 10:14:09 GMT",
+    "permissions-policy" : "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+    "referrer-policy" : "no-referrer, strict-origin-when-cross-origin",
+    "server" : "cloudflare",
+    "server-timing" : "cfEdge;dur=269,cfOrigin;dur=0,cfWorker;dur=196",
+    "x-content-type-options" : "nosniff",
+    "x-generation-id" : "gen-dec-1795688048-TzlszvSjQBMnRyRX13Wg",
+    "x-openrouter-error-origin" : "client"
+  }
+}

@@ -371,5 +371,6 @@ sequenceDiagram
 
 ### Open questions
 - **Q-T1:** Does `openai/gpt-6-luna-decisions` exist on the Decisions endpoint with image input? Spike S-2 answers this. If not, which decisions-modality model should be used?
+  - **Answer (spike S-2, 2026-11-26):** No. `POST https://openrouter.ai/api/alpha/decisions` is reachable (the documented URL works; the real 401 for a fake key and the 400 for an unknown model were recorded), but both real photo calls with `openai/gpt-6-luna-decisions` returned an upstream **401 `account_deactivated`**. The model is listed but not servable. Per D-T1 and plan fallback F1, **`TRIAGE_MODE` defaults to `off`** and plan tasks T28/T29 are skipped. Choosing another decisions-modality model is a product-owner decision for a later iteration. Captures: `app/backend/src/test/resources/openrouter-captures/decisions-*`.
 - **Q-T2:** Should fast-path acceptance also require `protective_film_visible=true` for categories that ship with film (R3.1)? The current rule does not require it, because a single photo often cannot show it, and the decision is preliminary (R5.3).
 - **Q-T3:** Is 98% the right precision target for switching the fast path on? This is moot in the PoC, because the fast path is disabled (D-T2 amendment).
