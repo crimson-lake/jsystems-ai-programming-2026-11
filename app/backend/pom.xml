@@ -35,6 +35,14 @@
 		<test.excludedGroups>capture,eval</test.excludedGroups>
 		<!-- Set to true by profile no-frontend; T40 binds frontend executions to it -->
 		<skip.frontend>false</skip.frontend>
+		<!-- T40: Angular build inside the Maven build (ADR-002 section 3.8, D-B5); Node is downloaded into target/ -->
+		<!-- by frontend-maven-plugin from nodejs.org; the no-frontend profile skips all frontend executions -->
+
+		<frontend-maven-plugin.version>2.0.2</frontend-maven-plugin.version>
+		<node.version>v24.22.3</node.version>
+		<frontend.dir>${project.basedir}/../frontend</frontend.dir>
+		<!-- -DskipFrontendTests skips only the Vitest run -->
+		<skipFrontendTests>false</skipFrontendTests>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -173,9 +181,77 @@
 				</executions>
 			</plugin>
 			<plugin>
+				<groupId>com.github.eirslett</groupId>
+				<artifactId>frontend-maven-plugin</artifactId>
+				<version>${frontend-maven-plugin.version}</version>
+				<configuration>
+					<workingDirectory>${frontend.dir}</workingDirectory>
+					<installDirectory>${project.build.directory}</installDirectory>
+				</configuration>
+				<executions>
+					<execution>
+						<id>install-node-and-npm</id>
+						<goals>
+							<goal>install-node-and-npm</goal>
+						</goals>
+						<phase>generate-resources</phase>
+						<configuration>
+							<nodeVersion>${node.version}</nodeVersion>
+						</configuration>
+					</execution>
+					<execution>
+						<id>npm-ci</id>
+						<goals>
+							<goal>npm</goal>
+						</goals>
+						<phase>generate-resources</phase>
+						<configuration>
+							<arguments>ci</arguments>
+						</configuration>
+					</execution>
+					<execution>
+						<id>npm-build</id>
+						<goals>
+							<goal>npm</goal>
+						</goals>
+						<phase>generate-resources</phase>
+						<configuration>
+							<arguments>run build -- --configuration production</arguments>
+						</configuration>
+					</execution>
+					<execution>
+						<id>npm-test</id>
+						<goals>
+							<goal>npm</goal>
+						</goals>
+						<phase>test</phase>
+						<configuration>
+							<arguments>run test -- --no-watch</arguments>
+							<skipTests>${skipFrontendTests}</skipTests>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-resources-plugin</artifactId>
 				<executions>
+					<execution>
+						<id>copy-frontend</id>
+						<phase>process-resources</phase>
+						<goals>
+							<goal>copy-resources</goal>
+						</goals>
+						<configuration>
+							<skip>${skip.frontend}</skip>
+							<outputDirectory>${project.build.outputDirectory}/static</outputDirectory>
+							<resources>
+								<resource>
+									<directory>${frontend.dir}/dist/frontend/browser</directory>
+								</resource>
+							</resources>
+						</configuration>
+					</execution>
 					<execution>
 						<id>copy-policies</id>
 						<phase>process-resources</phase>
@@ -228,6 +304,8 @@
 			<id>no-frontend</id>
 			<properties>
 				<skip.frontend>true</skip.frontend>
+				<skip.installnodenpm>true</skip.installnodenpm>
+				<skip.npm>true</skip.npm>
 			</properties>
 		</profile>
 	</profiles>
