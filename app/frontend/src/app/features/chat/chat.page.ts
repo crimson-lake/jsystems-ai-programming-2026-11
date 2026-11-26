@@ -7,6 +7,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
 import { map } from 'rxjs';
 import { t } from '../../shared/texts.pl';
 import { CaseSummaryComponent } from './case-summary.component';
+import { ComposerComponent } from './composer.component';
 import { MessageListComponent } from './message-list.component';
 
 /** Below this width the summary becomes a collapsible panel above the chat (PRD 9.2). */
@@ -20,6 +21,7 @@ const WIDE_QUERY = '(min-width: 960px)';
     MatExpansionModule,
     MatSidenavModule,
     CaseSummaryComponent,
+    ComposerComponent,
     MessageListComponent,
   ],
   templateUrl: './chat.page.html',

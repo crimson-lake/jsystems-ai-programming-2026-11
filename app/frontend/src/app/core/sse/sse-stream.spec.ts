@@ -1,5 +1,7 @@
 import {
   chunkEvery,
+  httpResponse,
+  recordedHttp,
   ofType,
   readRecording,
   recordedBlocks,
@@ -162,5 +164,28 @@ describe('openStream', () => {
     await done;
     expect(events).toHaveLength(3);
     expect(failures).toEqual([]);
+  });
+  describe('recorded HTTP error responses (T27 http-*.json)', () => {
+    it.each(['http-400.json', 'http-404.json', 'http-409.json', 'http-413.json', 'http-422.json'])(
+      '%s is reported with its status and parsed JSON ApiError',
+      async (file) => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(httpResponse(file)));
+        await openStream('/api/cases/x/messages', body, handlers, new AbortController().signal);
+
+        const recorded = recordedHttp(file);
+        expect(httpErrors).toEqual([{ status: recorded.status, error: JSON.parse(recorded.body) }]);
+        expect(events).toEqual([]);
+        expect(failures).toEqual([]);
+      },
+    );
+
+    it('the 400 recording keeps its fieldErrors (field and Polish message)', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(httpResponse('http-400.json')));
+      await openStream('/u', body, handlers, new AbortController().signal);
+      expect(httpErrors[0].error).toMatchObject({
+        code: 'VALIDATION',
+        fieldErrors: [{ field: 'text', message: 'Wpisz wiadomość lub dodaj zdjęcie.' }],
+      });
+    });
   });
 });

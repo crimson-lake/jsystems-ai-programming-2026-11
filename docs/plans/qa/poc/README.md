@@ -92,3 +92,20 @@ Screenshots from per-task QA and phase gates (plan §4.5). Each entry gives the 
 - **RETURN, `phone-1.jpg`, 10 days:** 200, 23.4 s; `ai.call` TRIAGE OK 928 ms (3916/233), VISION OK 10943 ms, DECISION OK 4235 ms, STREAM OK 6637 ms; `triage.agreement ruleId=T6 … llmLabel=REJECTED status=OK`.
 - **COMPLAINT, `phone-3.jpeg`, 200 days:** 200, 36.7 s; TRIAGE OK 272 ms, VISION OK 7051 ms, DECISION OK 18310 ms, STREAM OK 11007 ms; `triage.agreement ruleId=T6 … llmLabel=NEEDS_MORE_INFO status=OK`.
 - The model's labels are recorded, not pre-assumed. Chat turns make no Decisions call (IT-proven).
+
+## T33 + T34 — Chat screen and composer, browser QA (2026-11-26)
+
+- **App commit:** the T34 commit (dev stack: `spring-boot:run` with the real `.env`, `TRIAGE_MODE=assist`, plus the Angular dev server).
+- **Note:** the first attempt redirected from `/sprawa` back to `/` because a stale dev server from T31 (without the `sprawa` route) still held port 4200. After stopping it the flow worked; no app defect.
+
+| File | Step | Result |
+|---|---|---|
+| `T34/01-progress-1280.png` | Submit a RETURN (Smartfon, 10 days ago, `phone-1.jpg`) | Form disabled, progress steps shown (AC-14) |
+| `T34/02-first-decision-1280.png` | First decision | Navigated to `/sprawa`; summary panel; greeting, badge, three sections, disclaimer. The model returned **Odrzucone** with `[R1.1]`, `[R3.4]` and a suggestion to start a complaint (recorded, not pre-assumed) |
+| `T34/03-keyboard-question-1280.png` | Keyboard only: focus the textarea, type "Jaką datę zakupu podałem?", Enter | Send disabled while streaming (AC-38); the reply gives the form date "16 listopada 2026" (AC-34) |
+| `T34/04-photo-preview-1280.png` | Attach `phone-3.jpeg` in the composer | Removable preview above the input |
+| `T34/05-photo-turn-1280.png` | Send text + photo | Reply streamed; `ai.call step=VISION` for the chat photo in the log; no "Zmiana decyzji" block because the label stayed the same (AC-36) |
+| `T34/06-chat-390.png` | 390 px | Collapsed "Szczegóły sprawy" panel above the chat; `scrollWidth` 390 = `clientWidth` |
+| `T34/07-summary-open-390.png` | Open "Szczegóły sprawy" | Summary with thumbnail and badge |
+| `T34/08-new-case-dialog-390.png` | "Nowa sprawa" | Dialog text from PRD §9.3, focus on "Anuluj"; confirming returns an empty form |
+| — | Console | 0 errors, 0 warnings |

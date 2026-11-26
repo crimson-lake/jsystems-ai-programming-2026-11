@@ -1,7 +1,8 @@
 <ng-template #chat>
   <app-message-list />
-  <!-- T34: the composer (textarea, attach, send) goes here. -->
-  <div class="chat__composer-slot"></div>
+  <div class="chat__composer-slot">
+    <app-composer />
+  </div>
 </ng-template>
 
 @if (wide()) {

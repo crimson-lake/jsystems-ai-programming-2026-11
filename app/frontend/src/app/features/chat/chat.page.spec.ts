@@ -64,8 +64,13 @@ describe('ChatPage layout (ADR-003 3.3)', () => {
       expect(el.querySelectorAll('app-message-list').length).toBe(1);
     });
 
-    it('reserves a slot for the composer below the list (T34)', () => {
-      expect(el.querySelector('.chat__composer-slot')).toBeTruthy();
+    it('puts the composer in the slot below the list', () => {
+      const slot = el.querySelector('.chat__composer-slot')!;
+      expect(slot.querySelector('app-composer')).toBeTruthy();
+      expect(el.querySelectorAll('app-composer').length).toBe(1);
+      expect(
+        el.querySelector('app-message-list')!.compareDocumentPosition(slot) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
     });
   });
 
@@ -93,6 +98,11 @@ describe('ChatPage layout (ADR-003 3.3)', () => {
       await panel.expand();
       expect(await panel.isExpanded()).toBe(true);
     });
+  });
+
+  it('keeps one composer in the narrow layout too', async () => {
+    await render(false);
+    expect(el.querySelectorAll('app-composer').length).toBe(1);
   });
 
   it('switches layout when the viewport crosses 960 px', async () => {

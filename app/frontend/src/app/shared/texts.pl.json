@@ -73,5 +73,10 @@
   "datepicker.toMultiYearView": "Wybierz rok",
   "common.close": "Zamknij",
   "chat.photo.enlarge": "Powiększ zdjęcie",
-  "chat.list.label": "Rozmowa z asystentem"
+  "chat.list.label": "Rozmowa z asystentem",
+  "chat.composer.label": "Wiadomość",
+  "chat.composer.attach": "Dodaj zdjęcie",
+  "chat.composer.send": "Wyślij wiadomość",
+  "chat.composer.removePhoto": "Usuń zdjęcie",
+  "chat.announce.reply": "Asystent odpowiedział."
 }

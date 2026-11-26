@@ -19,8 +19,14 @@
 }
 
 .chat__main {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 480px;
+}
+
+.chat__composer-slot {
+  flex: none;
 }
 
 .chat--narrow {

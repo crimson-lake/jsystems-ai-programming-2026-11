@@ -92,3 +92,20 @@ export function sseResponse(chunks: Uint8Array[], options: SseResponseOptions = 
   });
   return new Response(body, { status, headers: { 'content-type': 'text/event-stream' } });
 }
+
+/** A recorded pre-stream HTTP error (`http-*.json`, plan T27): status, headers and the verbatim body text. */
+export interface RecordedHttp {
+  status: number;
+  headers: Record<string, string>;
+  body: string;
+}
+
+export function recordedHttp(name: string): RecordedHttp {
+  return JSON.parse(decoder.decode(readRecording(name))) as RecordedHttp;
+}
+
+/** Fake fetch `Response` with the recorded status, headers and body bytes. */
+export function httpResponse(name: string): Response {
+  const { status, headers, body } = recordedHttp(name);
+  return new Response(body, { status, headers });
+}

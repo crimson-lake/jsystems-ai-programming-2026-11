@@ -1,5 +1,6 @@
 import { computed, signal } from '@angular/core';
 import { TextKey } from '../app/shared/texts.pl';
+import { ComposerRejection } from '../app/core/state/case.store';
 import { CaseFormValue, DecisionView, ReducedPhoto, UiMessage } from '../app/core/model';
 
 /**
@@ -15,6 +16,7 @@ export class FakeCaseStore {
   readonly streaming = signal(false);
   readonly additionalPhotoCount = signal(0);
   readonly messageErrors = signal<Readonly<Record<string, TextKey>>>({});
+  readonly composerRejection = signal<ComposerRejection | null>(null);
   readonly canSend = computed(() => this.caseId() !== null && !this.streaming());
   readonly canAttachPhoto = computed(() => this.additionalPhotoCount() < 3);
 
@@ -28,6 +30,10 @@ export class FakeCaseStore {
 
   retry(messageId: string): void {
     this.retried.push(messageId);
+  }
+
+  clearComposerRejection(): void {
+    this.composerRejection.set(null);
   }
 
   reset(): void {

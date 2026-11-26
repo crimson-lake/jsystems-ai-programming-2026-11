@@ -2,9 +2,10 @@ import { DOCUMENT } from '@angular/common';
 import { Injectable, Provider, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { CaseSubmitter } from '../../features/case-form/case-submitter';
-import { TextKey } from '../../shared/texts.pl';
+import { TextKey, t } from '../../shared/texts.pl';
 import { CaseApiService, StreamHandle } from '../api/case-api.service';
 import {
+  ApiError,
   CaseFormValue,
   CopilotEvent,
   DecisionView,
@@ -18,6 +19,9 @@ import { StreamHandlers } from '../sse/sse-stream';
 export const WATCHDOG_MS = 60_000;
 /** Photos a customer may add in chat after the form (AC-33). */
 export const MAX_ADDITIONAL_PHOTOS = 3;
+
+/** Longest chat message the backend accepts (AC-31). */
+export const MAX_MESSAGE_LENGTH = 2000;
 
 const CHAT_URL = '/sprawa';
 const FORM_URL = '';
@@ -33,6 +37,15 @@ interface Turn {
   /** Decision shown before this turn's `decision` event; restored if the turn fails. */
   restoreDecision?: DecisionView | null;
   finished: boolean;
+}
+
+/**
+ * A chat send the server refused before streaming (400, 413, 422): the message is removed from the
+ * list and the composer takes `text` back, drops its photo preview and shows `errorKey` (ADR-003 3.7).
+ */
+export interface ComposerRejection {
+  readonly text: string;
+  readonly errorKey: TextKey;
 }
 
 interface PendingChat {
@@ -61,6 +74,7 @@ export class CaseStore implements CaseSubmitter {
   private readonly progressStep_ = signal<ProgressStep | null>(null);
   private readonly additionalPhotoCount_ = signal(0);
   private readonly messageErrors_ = signal<Readonly<Record<string, TextKey>>>({});
+  private readonly composerRejection_ = signal<ComposerRejection | null>(null);
 
   readonly caseId = this.caseId_.asReadonly();
   /** Values and reduced photo of the first submit; the form restores them after a failure. */
@@ -76,6 +90,8 @@ export class CaseStore implements CaseSubmitter {
   readonly submitError = this.submitError_.asReadonly();
   /** Text key of the inline error of each failed user message, by message id. */
   readonly messageErrors = this.messageErrors_.asReadonly();
+  /** Set when the server refused a send before streaming; the composer reads it and acknowledges. */
+  readonly composerRejection = this.composerRejection_.asReadonly();
 
   readonly canAttachPhoto = computed(() => this.additionalPhotoCount_() < MAX_ADDITIONAL_PHOTOS);
   readonly canSend = computed(() => this.caseId_() !== null && !this.streaming_());
@@ -128,9 +144,15 @@ export class CaseStore implements CaseSubmitter {
       clientMessageId: crypto.randomUUID(),
       isFirst: false,
     };
+    this.composerRejection_.set(null);
     this.pending.set(user.id, { text, photo });
     this.messages_.update((list) => [...list, user]);
     this.startChatTurn(caseId, user);
+  }
+
+  /** The composer applied the rejection (text restored, preview dropped, error shown). */
+  clearComposerRejection(): void {
+    this.composerRejection_.set(null);
   }
 
   /** Re-sends a failed message with its original `clientMessageId`, text and photo (AC-41). */
@@ -155,6 +177,7 @@ export class CaseStore implements CaseSubmitter {
     this.decision_.set(null);
     this.messages_.set([]);
     this.messageErrors_.set({});
+    this.composerRejection_.set(null);
     this.pending.clear();
     this.streaming_.set(false);
     this.submitting_.set(false);
@@ -191,8 +214,7 @@ export class CaseStore implements CaseSubmitter {
   private handlersFor(turn: Turn): StreamHandlers {
     return {
       onEvent: (event) => this.onEvent(turn, event),
-      // The HTTP error table (400/404/409/413/422) is mapped in T34; until then every failure is generic.
-      onHttpError: () => this.fail(turn),
+      onHttpError: (status, error) => this.onHttpError(turn, status, error),
       onFailure: () => this.fail(turn),
     };
   }
@@ -264,15 +286,63 @@ export class CaseStore implements CaseSubmitter {
     this.progressStep_.set(null);
   }
 
-  /** Stream `error`, truncation, network failure, HTTP error or watchdog: the server committed nothing. */
-  private fail(turn: Turn): void {
-    if (turn !== this.turn || turn.finished) return;
+  /**
+   * Pre-stream HTTP error (ADR-003 3.7). Chat: 404 and 409 fail the message with their own text;
+   * 400, 413 and 422 refuse the send (the composer takes the text back); anything else is generic.
+   */
+  private onHttpError(turn: Turn, status: number, error: ApiError | null): void {
+    if (turn.kind === 'first') return this.fail(turn);
+    switch (error?.code) {
+      case 'CASE_NOT_FOUND':
+        return this.fail(turn, 'chat.error.expired');
+      case 'CASE_BUSY':
+        return this.fail(turn, 'chat.error.busy');
+      case 'PHOTO_LIMIT':
+        return this.refuse(turn, 'chat.photoLimit', () =>
+          this.additionalPhotoCount_.set(MAX_ADDITIONAL_PHOTOS),
+        );
+      case 'PAYLOAD_TOO_LARGE':
+        return this.refuse(turn, 'form.photo.size');
+      case 'VALIDATION': {
+        const text = this.pending.get(turn.userMessageId!)?.text ?? '';
+        const tooLong =
+          text.length > MAX_MESSAGE_LENGTH ||
+          error.fieldErrors?.some((f) => f.message === t('chat.message.tooLong'));
+        return this.refuse(turn, tooLong ? 'chat.message.tooLong' : 'chat.message.empty');
+      }
+      default:
+        return this.fail(turn);
+    }
+  }
+
+  /** The server refused the send before streaming: undo the optimistic message, give the text back. */
+  private refuse(turn: Turn, errorKey: TextKey, apply?: () => void): void {
+    if (!this.endTurn(turn)) return;
+    const userId = turn.userMessageId!;
+    const pending = this.pending.get(userId);
+    const message = this.messages_().find((m) => m.id === userId);
+    this.messages_.update((list) => list.filter((m) => m.id !== userId));
+    this.pending.delete(userId);
+    this.revoke(message?.photoUrl);
+    apply?.();
+    this.composerRejection_.set({ text: pending?.text ?? message?.text ?? '', errorKey });
+  }
+
+  /** Common end of a failed turn; false when the turn is no longer the live one. */
+  private endTurn(turn: Turn): boolean {
+    if (turn !== this.turn || turn.finished) return false;
     turn.finished = true;
     this.clearWatchdog(turn);
     turn.handle?.abort();
     this.streaming_.set(false);
     this.submitting_.set(false);
     this.progressStep_.set(null);
+    return true;
+  }
+
+  /** Stream `error`, truncation, network failure, HTTP error or watchdog: the server committed nothing. */
+  private fail(turn: Turn, errorKey: TextKey = 'chat.error.generic'): void {
+    if (!this.endTurn(turn)) return;
 
     if (turn.kind === 'first') {
       const wasOnChat = turn.assistantId !== undefined;
@@ -291,7 +361,7 @@ export class CaseStore implements CaseSubmitter {
     }
     const userId = turn.userMessageId!;
     this.patchMessage(userId, (m) => ({ ...m, status: 'failed' }));
-    this.messageErrors_.update((errors) => ({ ...errors, [userId]: 'chat.error.generic' }));
+    this.messageErrors_.update((errors) => ({ ...errors, [userId]: errorKey }));
   }
 
   private discardTurn(): void {

@@ -8,7 +8,9 @@ import { Router, provideRouter } from '@angular/router';
 import { CaseSubmitter } from '../../features/case-form/case-submitter';
 import {
   RecordedBlock,
+  httpResponse,
   ofType,
+  recordedBlocks,
   recordedEvents,
   splice,
   sseResponse,
@@ -24,6 +26,10 @@ const PHONE = readFileSync(join(process.cwd(), '..', '..', 'assets', 'example-im
 
 const SUCCESS = recordedEvents('case-success.sse');
 const ERROR = recordedEvents('case-error.sse');
+const CHAT_TEXT = recordedEvents('chat-text.sse');
+const CHAT_PHOTO = recordedEvents('chat-photo.sse');
+const CHAT_REPLAY = recordedEvents('chat-replay.sse');
+const CHAT_TIMEOUT = recordedEvents('chat-error-timeout.sse');
 const CASE = ofType(SUCCESS, 'case');
 const PROGRESS = ofType(SUCCESS, 'progress'); // UPLOAD_RECEIVED, ANALYZING_PHOTO, PREPARING_DECISION, WRITING_REPLY
 const DECISION = ofType(SUCCESS, 'decision');
@@ -64,6 +70,8 @@ interface Reply {
   hang?: boolean;
   status?: number;
   network?: boolean;
+  /** Recorded pre-stream HTTP error (`http-*.json`) answered as the real response. */
+  http?: string;
 }
 
 describe('CaseStore', () => {
@@ -88,6 +96,7 @@ describe('CaseStore', () => {
         const reply = replies.shift();
         if (!reply) return Promise.reject(new Error('unexpected fetch'));
         if (reply.network) return Promise.reject(new TypeError('Failed to fetch'));
+        if (reply.http) return Promise.resolve(httpResponse(reply.http));
         if (reply.status) return Promise.resolve(new Response(null, { status: reply.status }));
         return Promise.resolve(
           sseResponse([splice(reply.blocks)], { hang: reply.hang, signal: init.signal }),
@@ -447,6 +456,185 @@ describe('CaseStore', () => {
       store.sendMessage('Pytanie');
       await idle();
       expect(store.messages().at(-1)).toMatchObject({ role: 'user', status: 'failed' });
+    });
+  });
+
+  describe('chat turns from the T27 recordings', () => {
+    beforeEach(async () => submitOk());
+
+    const textOf = (events: RecordedBlock[]) =>
+      ofType(events, 'delta')
+        .map((d) => (d.data as { text: string }).text)
+        .join('');
+    const decisionOf = (events: RecordedBlock[]) => ofType(events, 'decision')[0].data as DecisionView;
+
+    it('chat-text.sse (with its : ping comment): reply text, decision and completion', async () => {
+      replies.push({ blocks: recordedBlocks('chat-text.sse') });
+      store.sendMessage('Jaką datę zakupu podałem?');
+      await idle();
+      const [, user, reply] = store.messages();
+      expect(user.status).toBe('complete');
+      expect(reply.text).toBe(textOf(CHAT_TEXT));
+      expect(reply.decision).toEqual(decisionOf(CHAT_TEXT));
+      expect(reply.status).toBe('complete');
+      expect(store.decision()).toEqual(decisionOf(CHAT_TEXT));
+      expect(store.additionalPhotoCount()).toBe(0);
+    });
+
+    it('chat-photo.sse: follows ANALYZING_PHOTO and counts the photo only on `done`', async () => {
+      replies.push({ blocks: recordedBlocks('chat-photo.sse') });
+      store.sendMessage('Przesyłam dodatkowe zdjęcie.', photo());
+      await vi.waitFor(() => expect(store.messages()).toHaveLength(3));
+      await idle();
+      expect(store.messages().at(-1)!.text).toBe(textOf(CHAT_PHOTO));
+      expect(store.progressStep()).toBeNull();
+      expect(store.additionalPhotoCount()).toBe(1);
+    });
+
+    it('chat-error-timeout.sse: a real TIMEOUT error marks the message failed with the generic error', async () => {
+      replies.push({ blocks: recordedBlocks('chat-error-timeout.sse') });
+      store.sendMessage('Przesyłam dodatkowe zdjęcie.', photo());
+      await idle();
+      const user = store.messages().at(-1)!;
+      expect(store.messages()).toHaveLength(2);
+      expect(user.status).toBe('failed');
+      expect(store.messageErrors()[user.id]).toBe('chat.error.generic');
+      expect(store.additionalPhotoCount()).toBe(0);
+      expect(store.composerRejection()).toBeNull();
+    });
+
+    it('error after decision (spliced: real decision + deltas of chat-text, real error of chat-error-timeout)', async () => {
+      const before = store.decision();
+      replies.push({
+        blocks: [...ofType(CHAT_TEXT, 'decision'), ...ofType(CHAT_TEXT, 'delta').slice(0, 4), ...ofType(CHAT_TIMEOUT, 'error')],
+      });
+      store.sendMessage('Pytanie');
+      await idle();
+      expect(store.messages()).toHaveLength(2);
+      expect(store.messages()[1]).toMatchObject({ role: 'user', status: 'failed' });
+      expect(store.decision()).toBe(before);
+      expect(store.messageErrors()[store.messages()[1].id]).toBe('chat.error.generic');
+    });
+
+    it('replay: a retry after TIMEOUT is answered with chat-replay.sse and completes like a normal reply', async () => {
+      replies.push({ blocks: recordedBlocks('chat-error-timeout.sse') });
+      store.sendMessage('Jaką datę zakupu podałem?');
+      await idle();
+      const failed = store.messages().at(-1)!;
+      expect(failed.status).toBe('failed');
+
+      replies.push({ blocks: recordedBlocks('chat-replay.sse') });
+      store.retry(failed.id);
+      await idle();
+      expect(bodies.at(-1)!.get('clientMessageId')).toBe(failed.clientMessageId);
+      const messages = store.messages();
+      expect(messages).toHaveLength(3);
+      expect(messages[1]).toMatchObject({ id: failed.id, status: 'complete' });
+      expect(messages[2]).toMatchObject({ role: 'assistant', status: 'complete' });
+      expect(messages[2].text).toBe(textOf(CHAT_REPLAY));
+      expect(messages[2].decision).toEqual(decisionOf(CHAT_REPLAY));
+      expect(store.messageErrors()[failed.id]).toBeUndefined();
+    });
+  });
+
+  describe('HTTP error table for chat (ADR-003 3.7), from the recorded responses', () => {
+    beforeEach(async () => submitOk());
+
+    const sendWith = async (http: string, text = 'Pytanie', withPhoto = false) => {
+      replies.push({ blocks: [], http });
+      const reduced = withPhoto ? photo() : undefined;
+      store.sendMessage(text, reduced);
+      await idle();
+      return reduced;
+    };
+
+    it.each([
+      ['http-409.json', 'chat.error.busy'],
+      ['http-404.json', 'chat.error.expired'],
+    ] as const)('%s keeps the failed message with %s', async (file, key) => {
+      await sendWith(file);
+      const user = store.messages().at(-1)!;
+      expect(store.messages()).toHaveLength(2);
+      expect(user).toMatchObject({ role: 'user', text: 'Pytanie', status: 'failed' });
+      expect(store.messageErrors()[user.id]).toBe(key);
+      expect(store.composerRejection()).toBeNull();
+      expect(store.canSend()).toBe(true);
+    });
+
+    it('409 CASE_BUSY can be retried with the same clientMessageId', async () => {
+      await sendWith('http-409.json');
+      const user = store.messages().at(-1)!;
+      replies.push({ blocks: recordedBlocks('chat-text.sse') });
+      store.retry(user.id);
+      await idle();
+      expect(bodies.at(-1)!.get('clientMessageId')).toBe(user.clientMessageId);
+      expect(store.messages().find((m: UiMessage) => m.id === user.id)!.status).toBe('complete');
+      expect(store.messageErrors()[user.id]).toBeUndefined();
+    });
+
+    it('an unparsable error body (no recording: a gateway page) is the generic error with retry', async () => {
+      replies.push({ blocks: [], status: 502 });
+      store.sendMessage('Pytanie');
+      await idle();
+      const user = store.messages().at(-1)!;
+      expect(user.status).toBe('failed');
+      expect(store.messageErrors()[user.id]).toBe('chat.error.generic');
+    });
+
+    it('422 PHOTO_LIMIT: removes the message, hands the text back, drops the photo and blocks attaching', async () => {
+      const reduced = await sendWith('http-422.json', 'Opis zdjęcia', true);
+      expect(store.messages()).toHaveLength(1);
+      expect(store.composerRejection()).toEqual({ text: 'Opis zdjęcia', errorKey: 'chat.photoLimit' });
+      expect(store.canAttachPhoto()).toBe(false);
+      expect(store.additionalPhotoCount()).toBe(3);
+      expect(store.messageErrors()).toEqual({});
+      expect(store.canSend()).toBe(true);
+      expect(reduced!.objectUrl).toBeTruthy();
+    });
+
+    it('413 PAYLOAD_TOO_LARGE: removes the message, keeps the text, error form.photo.size', async () => {
+      await sendWith('http-413.json', 'Duże zdjęcie', true);
+      expect(store.messages()).toHaveLength(1);
+      expect(store.composerRejection()).toEqual({ text: 'Duże zdjęcie', errorKey: 'form.photo.size' });
+      expect(store.canAttachPhoto()).toBe(true);
+    });
+
+    it('400 VALIDATION: removes the message and reports chat.message.empty for the recorded text error', async () => {
+      await sendWith('http-400.json', '');
+      expect(store.messages()).toHaveLength(1);
+      expect(store.composerRejection()).toEqual({ text: '', errorKey: 'chat.message.empty' });
+    });
+
+    it('400 VALIDATION for a text over 2000 characters reports chat.message.tooLong', async () => {
+      const long = 'a'.repeat(2001);
+      await sendWith('http-400.json', long);
+      expect(store.composerRejection()).toEqual({ text: long, errorKey: 'chat.message.tooLong' });
+    });
+
+    it('clearComposerRejection and the next send clear the rejection', async () => {
+      await sendWith('http-413.json', 'x', true);
+      store.clearComposerRejection();
+      expect(store.composerRejection()).toBeNull();
+      await sendWith('http-413.json', 'y', true);
+      expect(store.composerRejection()).not.toBeNull();
+      replies.push({ blocks: recordedBlocks('chat-text.sse'), hang: true });
+      store.sendMessage('z');
+      expect(store.composerRejection()).toBeNull();
+    });
+
+    it('reset clears a pending rejection', async () => {
+      await sendWith('http-422.json', 'x', true);
+      store.reset();
+      expect(store.composerRejection()).toBeNull();
+    });
+
+    it('revokes the photo object URL of a rejected message (nothing shows it any more)', async () => {
+      const revoke = vi.fn();
+      vi.stubGlobal('URL', Object.assign(URL, { revokeObjectURL: revoke }));
+      replies.push({ blocks: [], http: 'http-413.json' });
+      store.sendMessage('x', { ...photo(), objectUrl: 'blob:rejected' });
+      await idle();
+      expect(revoke).toHaveBeenCalledWith('blob:rejected');
     });
   });
 
