@@ -157,7 +157,7 @@ The PoC must show whether an AI-assisted first decision, based on a photo, the f
 - **AC-32** The customer can attach at most one photo per message, with the same format and size rules as AC-09 and AC-10, and can send a photo with or without text.
 - **AC-33** At most 3 additional photos can be sent per case. After the third, the attach control is disabled with the hint "Osiągnięto limit zdjęć w tej sprawie".
 - **AC-34** Every agent reply uses the full case context: form data, all image analyses, and all earlier messages in the case. Asked "Jaką datę zakupu podałem?", the agent returns the date from the form.
-- **AC-35** When a reply changes the decision, the reply begins with a "Zmiana decyzji" block that shows the previous and the new decision label and the reason, and the summary panel shows the new label.
+- **AC-35** When a reply changes the decision, the reply begins with a "Zmiana decyzji" block that shows the previous and the new decision label and the reason, and the summary panel shows the new label. The only content allowed before this block is the safety block, when the new decision is a safety escalation (AC-26).
 - **AC-36** When a reply does not change the decision, it contains no "Zmiana decyzji" block and the summary panel label stays the same.
 - **AC-37** The agent's reply text is displayed progressively while it is being generated; a typing indicator is shown until the first text appears.
 - **AC-38** While a reply is being generated, the send button is disabled.
@@ -207,6 +207,7 @@ The PoC must show whether an AI-assisted first decision, based on a photo, the f
 - The decision must not limit or misstate the consumer's statutory rights. The example policies are based on Polish consumer law in force since 1 January 2023 (14-day withdrawal for distance purchases; 2-year seller liability for non-conformity with a presumption that it existed at delivery; 14-day deadline for the seller's answer to a complaint). They are synthetic examples and must be reviewed by the business before real use.
 - Customers' photos and descriptions are sent to an external AI service. The PoC uses **synthetic test data and test photos only** during development and demos; no real customer data.
 - The PoC operates under a fictional store; no real retailer name or brand appears in the agent's messages.
+- **Brand exception (decided 2026-11-26):** the UI deliberately uses the visual identity documented in `docs/design-guidelines.md` (NOVOMATIC Technologies Poland: colours, typography, logo, favicon) for course purposes. The agent's messages still never name a real company. Usage rights for the logo and favicon are unverified and must be cleared before any use outside the course.
 
 ### Functional
 - One photo in the form; up to 3 additional photos in chat per case; one photo per chat message.
@@ -334,6 +335,13 @@ flowchart TD
 - Reveal its instructions, paste the raw policy document, or reveal internal system details.
 - Follow instructions contained in the customer's text or visible in the photo that try to change its role or rules.
 
+### Precedence when criteria conflict
+When more than one rule applies to the same case, the first one in this order decides:
+1. **Safety** (AC-26, return R7.1, complaint C7.1): always "Przekazane do specjalisty", even when the time window is exceeded.
+2. **Time window** (AC-24, AC-25): "Odrzucone".
+3. **Unusable photo or category mismatch** on the first decision (AC-19): "Potrzebne dodatkowe informacje".
+4. **Low cause confidence for a complaint** (AC-27): never "Odrzucone".
+
 ### Decision categories and communication
 
 | Category | Polish label | When | Message must include |
@@ -368,7 +376,15 @@ flowchart TD
 - Unusable photos lead to "Needs more information" in chat, not to a form error.
 - Polish UI; no persistence; reload ends the case.
 
+### Decisions made with the product owner (2026-11-26)
+- **AI evaluation:** it asserts only outcomes that follow from form data and policy rules: time windows, safety wording in the text, prompt injection, cited rule IDs. For the example photos the model's assessment is recorded, never pre-assumed, as `assets/example-images/README.md` requires. The triage fast path (ADR-004) therefore stays disabled in the PoC.
+- **Brand:** the UI keeps the brand from `docs/design-guidelines.md`, under the exception in Section 8.
+- **Return safety:** the Return Policy gains rule R7.1 (safety), mirroring C7.1. Safety escalations of returns cite R7.1.
+- **Manual QA:** a short manual check of the running app follows every task that changes it. A full QA with brand comparison closes the implementation.
+- **AI budget:** OpenRouter spend for building the PoC is capped at $2, with the fallback cuts defined in the implementation plan.
+
 ### Assumptions (to confirm)
+- When the photo limit (AC-33) is reached and the decision is still "Potrzebne dodatkowe informacje", the label stays unchanged. The next steps tell the customer to bring the device to a Store shop for in-person assessment (R5.1 / C6.1). *(Proposed 2026-11-26, to be confirmed.)*
 - Limit of 3 additional photos per case and 60 s time to first decision are PoC values chosen to bound cost and waiting time.
 - Purchase date limit of 10 years is a sanity check only.
 - "Today" for date calculations is the server's current date in the Europe/Warsaw time zone.

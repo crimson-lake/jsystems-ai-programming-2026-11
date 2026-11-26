@@ -35,3 +35,6 @@ R5.3. Every return acceptance given by the Copilot is **preliminary**. The final
 - the item category is "Other" and its resale condition cannot be judged,
 - the customer claims the item was delivered damaged (route to the Complaint Policy and escalate),
 - the purchase date is unclear or disputed.
+
+## R7. Safety
+R7.1. If the photo or description indicates a **swollen battery, burn marks, smoke, a burning smell, sparks or exposed wiring**, the agent must first tell the customer to stop using and stop charging the device and keep it away from flammable materials, and must escalate the case to a specialist regardless of other findings, including the return window.
