@@ -130,3 +130,17 @@ Screenshots from per-task QA and phase gates (plan §4.5). Each entry gives the 
 | — | Console | No app errors on any page |
 | — | `ai.call` in `app-q3.log` | 50 lines, all `status=OK`: TRIAGE 8 (`typesafe/jev-1.14`), VISION 12 (8 form + 4 chat), DECISION 15, STREAM 15; `DECISION_REASK` not observed |
 | — | Brand | Header `#0D244C`, white logo on navy only, orange CTA `#FF9700` with 8 px radius, navy secondary buttons, Montserrat; no horizontal scroll at 390 and 1280 |
+
+## T40 — Packaging into the JAR (2026-11-26)
+
+- **App commit:** `0ad9543`. Separate records:
+  - **Build:** `./mvnw package` (from `app/backend`) and `./mvnw verify`: BUILD SUCCESS, 0 `[WARNING]` lines. Node v24.22.3 is downloaded into `target/` by frontend-maven-plugin 2.0.2.
+  - **Tests in the same `verify` run:** Surefire 266, Failsafe 64 (incl. `SpaForwardingIT` 4, not skipped), Vitest 24 files / 268 tests. All passed, 0 skipped.
+  - **Artifact:** `copilot-0.0.1-SNAPSHOT.jar` contains `static/index.html`, `static/main-*.js` and `policies/*.md` (113 MB, of which 77 MB is `openai-java-core`).
+  - **Startup from the repo root:** `java -jar app/backend/target/copilot-0.0.1-SNAPSHOT.jar` → health UP after 11.0 s ("Started CopilotApplication in 8.8 seconds"; TAC-02 < 15 s). `/` and `/sprawa` → `index.html`; `/main-*.js` → `text/javascript`; `/api/x` → 404 JSON without internals.
+- **QA on the JAR (also confirms the Q3 scroll fix):**
+
+| File | Step | Result |
+|---|---|---|
+| `T40/01-form-jar-390.png` | Form served by the JAR at 390 px | Same UI as the dev server |
+| `T40/02-chat-start-visible-jar-390.png` | RETURN, `phone-3.jpeg`, reason "Bateria spuchła i czuć swąd." | After the reply completes the list stays at the start of the reply: safety block, greeting and the "Przekazane do specjalisty" badge are visible; console clean |
