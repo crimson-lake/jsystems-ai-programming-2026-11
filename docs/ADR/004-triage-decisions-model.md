@@ -63,7 +63,7 @@ photo + form → [TRIAGE: decisions model] → router ─┬─ fast path → ru
 
 State sent to the model (*Jev 1.14* wire format, recorded in `openrouter-captures/decisions-jev-*.request.json`):
 - `state` is an **array**: first a JSON object with `caseType`, `formCategory`, `model`, `daysSincePurchase`, `reason` (customer text), then a random **UUID string** that references the photo asset. Jev also matches an asset key inside longer text, so the key is always a fresh UUID that cannot occur in customer text;
-- `assets` is a map `{<uuid>: {"type": "image", "format": "jpg", "data_base64": "<standard base64, no data: prefix>"}}`. Every asset must be referenced, or the request fails with 400;
+- `assets` is a map `{<uuid>: {"type": "image", "format": "jpeg", "data_base64": "<standard base64, no data: prefix>"}}` (`jpeg` as in the recorded successful request; the API also accepts `jpg` and `png`). Every asset must be referenced, or the request fails with 400;
 - `questions` is a **map** keyed by the question keys below; each entry has `type`, `instructions` and `criteria` (`noul`: `{"true": …, "false": …}`; `choice`: option → description; `score`: an **array** ordered from lowest to highest);
 - the photo is the JPEG the browser already produced (ADR-000 D-06): JPEG satisfies Jev's PNG/JPEG rule, and the reducer's longest edge of **1,568 px** satisfies Jev's 256–1,568 px per side. A photo with a side under 256 px (not among the example photos) gets a 400 and the router falls back to the LLM path (T0).
 
