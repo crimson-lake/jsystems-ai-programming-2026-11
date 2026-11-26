@@ -144,3 +144,12 @@ Screenshots from per-task QA and phase gates (plan §4.5). Each entry gives the 
 |---|---|---|
 | `T40/01-form-jar-390.png` | Form served by the JAR at 390 px | Same UI as the dev server |
 | `T40/02-chat-start-visible-jar-390.png` | RETURN, `phone-3.jpeg`, reason "Bateria spuchła i czuć swąd." | After the reply completes the list stays at the start of the reply: safety block, greeting and the "Przekazane do specjalisty" badge are visible; console clean |
+
+## T41 — E2E on the real stack (2026-11-26)
+
+- **App commit:** `b13bd45` (JAR copied to a private path so a later Maven build could not replace it mid-run). Real OpenRouter on `:8080`; a second JAR with `OPENROUTER_API_KEY=invalid` on `:8081` for the error banner. No mocks, no `page.route`.
+- **Command (from `app/e2e`):** `E2E_BASE_URL=http://localhost:8080 E2E_BAD_KEY_URL=http://localhost:8081 E2E_APP_LOG=<fresh log per run> npx playwright test`.
+- **Full runs: 3 (the budget limit).** Run 1 aborted (360 px category select click intercepted by the floating label; fixed in the helper with a forced click after checking that a real mouse click opens the select). Run 2: 15/16 (keyboard at 360 px could not reach "Nowa sprawa" inside the collapsed summary; the spec now opens "Szczegóły sprawy" with Enter first, still keyboard-only). **Run 3: 16/16 passed, 6.1 min.**
+- **Specs (each at 360 and 1280 px unless noted):** return-happy, outside-window, safety-wording, complaint-followup, chat-photo-new-case, error-banner, keyboard, no-horizontal-scroll (360/390/768/1280/1920 in one test), actuator health.
+- **Coverage teardown (runs 2 and 3), "proof OK":** `POST /api/cases` 15, chat text-only 2, chat with photo 2, `DELETE` → 204 2, `GET /actuator/health` 1; `ai.call` with `status=OK`: TRIAGE 13, VISION 15 (form and chat on the same case), DECISION 17, STREAM 17; `DECISION_REASK` not observed.
+- **No app defects.** Changes were limited to `app/e2e` selectors, waits and the network logger (Chromium hides multipart bodies that contain a File, so a null body is logged as a photo part).
