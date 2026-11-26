@@ -12,6 +12,7 @@ import { provideDateFnsAdapter } from '@angular/material-date-fns-adapter';
 import { provideRouter } from '@angular/router';
 import { pl } from 'date-fns/locale';
 import { routes } from './app.routes';
+import { CASE_STORE_PROVIDERS } from './core/state/case.store';
 
 registerLocaleData(localePl);
 
@@ -24,5 +25,6 @@ export const appConfig: ApplicationConfig = {
     { provide: MAT_DATE_LOCALE, useValue: pl },
     { provide: LOCALE_ID, useValue: 'pl' },
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
+    ...CASE_STORE_PROVIDERS,
   ],
 };
