@@ -2,6 +2,13 @@
 
 This folder will contain the application built during the course.
 
+> **This project's stack (decided in `../docs/ADR/`):**
+> - Spring Boot 4.2 + Maven + Java 25 in `backend/`, using the OpenAI Java SDK against OpenRouter.
+> - Angular 22 + Angular Material in `frontend/`.
+> - Playwright in `e2e/`.
+>
+> The generic checklist below names other stacks (Next.js, Vercel AI SDK, Tailwind) only as course examples. For this project, follow the ADRs and `../docs/plans/poc-implementation-plan.md`. Stack-specific commands live in `backend/AGENTS.md` and `frontend/AGENTS.md`, which are created during scaffolding.
+
 ## How to start
 
 The app is scaffolded live during the course through a structured process:

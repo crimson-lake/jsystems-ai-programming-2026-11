@@ -1,6 +1,6 @@
 ---
 applyTo: '**/*.ts,**/*.tsx'
-description: 'Instructions and style guidelines for TypeScript React projects'
+description: 'General TypeScript typing rules (apply to Angular and React code alike); framework-specific rules live in nested AGENTS.md files'
 ---
 Never use `any` and `as` in TypeScript projects.
 
