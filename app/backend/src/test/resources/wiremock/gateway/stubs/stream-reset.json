@@ -1,0 +1,21 @@
+{
+  "name": "stream-reset",
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/responses",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.stream == true)]"
+      }
+    ]
+  },
+  "response": {
+    "fault": "CONNECTION_RESET_BY_PEER"
+  },
+  "metadata": {
+    "source": "responses-c-streaming-text",
+    "sourceFile": "openrouter-captures/responses-c-streaming-text.meta.json",
+    "note": "verbatim from capture; discriminator selects the call kind",
+    "addition": "fault CONNECTION_RESET_BY_PEER"
+  }
+}

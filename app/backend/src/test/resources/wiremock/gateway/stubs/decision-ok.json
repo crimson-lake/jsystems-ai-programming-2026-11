@@ -1,0 +1,37 @@
+{
+  "name": "decision-ok",
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/responses",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.text.format.schema.properties.ruleIds"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "access-control-allow-origin": "*",
+      "access-control-expose-headers": "WWW-Authenticate,PAYMENT-REQUIRED,Payment-Receipt,PAYMENT-RESPONSE,Location,X-Generation-Id,x-openrouter-error-origin,x-openrouter-error-tool,X-Provider-Name,request-id,x-openrouter-subscription-passthrough,anthropic-ratelimit-unified-status,Retry-After,cf-ray",
+      "alt-svc": "h3=\":443\"; ma=86400",
+      "cf-ray": "a6081e5c5a4c0273-WAW",
+      "content-type": "application/json",
+      "date": "Thu, 26 Nov 2026 10:13:09 GMT",
+      "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+      "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+      "server": "cloudflare",
+      "server-timing": "cfEdge;dur=2,cfOrigin;dur=0,cfWorker;dur=3003",
+      "x-content-type-options": "nosniff",
+      "x-generation-id": "gen-1795687986-FayuSdgmin2pNycngUG8",
+      "x-openrouter-release": "api;6974da3e-2d30-4253-9b9d-763143ceef81"
+    },
+    "bodyFileName": "responses-b-decision-structured.json"
+  },
+  "metadata": {
+    "source": "responses-b-decision-structured",
+    "sourceFile": "openrouter-captures/responses-b-decision-structured.meta.json",
+    "note": "verbatim from capture; discriminator selects the call kind",
+    "addition": "none"
+  }
+}

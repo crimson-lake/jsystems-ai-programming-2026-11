@@ -1,0 +1,38 @@
+{
+  "name": "stream-delayed",
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/responses",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.stream == true)]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "access-control-allow-origin": "*",
+      "access-control-expose-headers": "WWW-Authenticate,PAYMENT-REQUIRED,Payment-Receipt,PAYMENT-RESPONSE,Location,X-Generation-Id,x-openrouter-error-origin,x-openrouter-error-tool,X-Provider-Name,request-id,x-openrouter-subscription-passthrough,anthropic-ratelimit-unified-status,Retry-After,cf-ray",
+      "alt-svc": "h3=\":443\"; ma=86400",
+      "cache-control": "no-cache",
+      "cf-ray": "a6081e8ecf43c3d8-WAW",
+      "content-type": "text/event-stream",
+      "date": "Thu, 26 Nov 2026 10:13:15 GMT",
+      "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+      "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+      "server": "cloudflare",
+      "x-content-type-options": "nosniff",
+      "x-generation-id": "gen-1795687994-vcOuSn1OQo5tWmX6AlQK",
+      "x-openrouter-release": "api;6974da3e-2d30-4253-9b9d-763143ceef81"
+    },
+    "bodyFileName": "responses-c-streaming-text.sse",
+    "fixedDelayMilliseconds": 4000
+  },
+  "metadata": {
+    "source": "responses-c-streaming-text",
+    "sourceFile": "openrouter-captures/responses-c-streaming-text.meta.json",
+    "note": "verbatim from capture; discriminator selects the call kind",
+    "addition": "fixed delay 4000 ms"
+  }
+}
