@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: copilot
+  threads:
+    virtual:
+      enabled: true
+  mvc:
+    async:
+      request-timeout: 125s
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+
+server:
+  compression:
+    enabled: false
+  error:
+    include-stacktrace: never
+    include-message: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+app:
+  case-ttl: ${CASE_TTL_MINUTES:60}m
+  zone: ${APP_ZONE:Europe/Warsaw}
+
+# Placeholders with defaults so the app starts without a key.
+# T14 replaces them with typed @ConfigurationProperties (required, validated non-blank).
+openrouter:
+  api-key: ${OPENROUTER_API_KEY:}
+  base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}
+  vision-model: ${LLM_VISION_MODEL:${LLM_MODEL:}}
+  decision-model: ${LLM_DECISION_MODEL:${LLM_MODEL:}}
+  decision-reasoning-effort: ${LLM_DECISION_REASONING_EFFORT:medium}
+  app-title: ${OPENROUTER_APP_TITLE:Hardware Service Decision Copilot PoC}
+  app-url: ${OPENROUTER_APP_URL:http://localhost:8080}
+
+triage:
+  mode: ${TRIAGE_MODE:assist}
+  model: ${LLM_TRIAGE_MODEL:openai/gpt-6-luna-decisions}
+  low-confidence: ${TRIAGE_LOW_CONFIDENCE:0.80}
+  high-confidence: ${TRIAGE_HIGH_CONFIDENCE:0.95}
+  safety-probability: ${TRIAGE_SAFETY_PROBABILITY:0.30}
+  base-url: ${OPENROUTER_DECISIONS_URL:https://openrouter.ai/api/alpha/decisions}
+  timeout: 8s
+
+---
+# Local .env at the repository root; never loaded under profile "test" (ADR-000 section 7).
+spring:
+  config:
+    activate:
+      on-profile: "!test"
+    import: "optional:file:.env[.properties],optional:file:../../.env[.properties]"
