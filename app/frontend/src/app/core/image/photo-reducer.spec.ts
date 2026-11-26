@@ -64,13 +64,13 @@ describe('reducePhoto', () => {
     return undefined;
   }
 
-  it('reduces laptop-1.png (3024x3135, JPEG content) to a 1543x1600 JPEG', async () => {
+  it('reduces laptop-1.png (3024x3135, JPEG content) to a 1512x1568 JPEG', async () => {
     const { create } = stubBitmap(3024, 3135);
     const file = example('laptop-1.png', 'image/png');
     const reduced = await reducePhoto(file);
     expect(create).toHaveBeenCalledWith(file, { imageOrientation: 'from-image' });
-    expect(reduced.width).toBe(1543);
-    expect(reduced.height).toBe(1600);
+    expect(reduced.width).toBe(1512);
+    expect(reduced.height).toBe(1568);
     expect(reduced.blob.type).toBe('image/jpeg');
     expect(reduced.objectUrl).toBe('blob:fake');
     expect(reduced.originalName).toBe('laptop-1.png');
@@ -80,7 +80,7 @@ describe('reducePhoto', () => {
   it('scales a landscape photo by the width and closes the bitmap', async () => {
     const { bitmap } = stubBitmap(3200, 1600);
     const reduced = await reducePhoto(example('phone-1.jpg', 'image/jpeg'));
-    expect([reduced.width, reduced.height]).toEqual([1600, 800]);
+    expect([reduced.width, reduced.height]).toEqual([1568, 784]);
     expect(bitmap.close).toHaveBeenCalled();
   });
 
@@ -114,7 +114,7 @@ describe('reducePhoto', () => {
         cb(new Blob(['jpeg'], { type: 'image/jpeg' }));
       });
     const reduced = await reducePhoto(example('phone-1.jpg', 'image/jpeg'));
-    expect([reduced.width, reduced.height]).toEqual([1600, 800]);
+    expect([reduced.width, reduced.height]).toEqual([1568, 784]);
     expect(drawImage).toHaveBeenCalled();
     expect(toBlob).toHaveBeenCalled();
   });

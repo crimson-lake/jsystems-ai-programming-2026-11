@@ -270,7 +270,7 @@ The Angular output folder `dist/<project>/browser` is the `@angular/build:applic
 | `openrouter.base-url` | `${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}` |
 | `openrouter.vision-model` / `decision-model` | `${LLM_VISION_MODEL:${LLM_MODEL}}` / `${LLM_DECISION_MODEL:${LLM_MODEL}}` |
 | `openrouter.decision-reasoning-effort` | `${LLM_DECISION_REASONING_EFFORT:medium}` |
-| `triage.mode` / `model` / `low-confidence` / `high-confidence` / `safety-probability` / `base-url` / `timeout` | `${TRIAGE_MODE:assist}` / `${LLM_TRIAGE_MODEL:openai/gpt-6-luna-decisions}` / `${TRIAGE_LOW_CONFIDENCE:0.80}` / `${TRIAGE_HIGH_CONFIDENCE:0.95}` / `${TRIAGE_SAFETY_PROBABILITY:0.30}` / `${OPENROUTER_DECISIONS_URL:https://openrouter.ai/api/alpha/decisions}` / `8s` (ADR-001 §3.6) |
+| `triage.mode` / `model` / `low-confidence` / `high-confidence` / `safety-probability` / `base-url` / `timeout` | `${TRIAGE_MODE:assist}` / `${LLM_TRIAGE_MODEL:typesafe/jev-1.14}` / `${TRIAGE_LOW_CONFIDENCE:0.80}` / `${TRIAGE_HIGH_CONFIDENCE:0.95}` / `${TRIAGE_SAFETY_PROBABILITY:0.30}` / `${OPENROUTER_DECISIONS_URL:https://openrouter.ai/api/alpha/decisions}` / `8s` (ADR-001 §3.6) |
 | `openrouter.app-title` / `app-url` | `${OPENROUTER_APP_TITLE:Hardware Service Decision Copilot PoC}` / `${OPENROUTER_APP_URL:http://localhost:8080}` |
 
 ---

@@ -364,7 +364,7 @@ describe('CaseFormPage', () => {
       expect(form.purchaseDate.getDate()).toBe(24);
       expect(form.photo.name).toBe('phone-1.jpg');
       expect(photo.originalName).toBe('phone-1.jpg');
-      expect(photo.width).toBe(1600);
+      expect(photo.width).toBe(1568);
     });
 
     it('disables the inputs and shows the three progress steps', async () => {

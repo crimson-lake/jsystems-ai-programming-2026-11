@@ -40,7 +40,7 @@ From `app/backend`, with the key in the root `.env` (never commit it) and profil
 | `responses-f-invalid-model` | (f) non-existent model id | 2026-11-26, 400 `… is not a valid model ID` |
 | `responses-g-incomplete-stream` | (g) `max_output_tokens=16`, streaming | 2026-11-26, 200 stream ending in `response.incomplete` (`max_output_tokens`) |
 
-### S-2 Decisions API (`DecisionsCaptureIT`, model `openai/gpt-6-luna-decisions`)
+### S-2 Decisions API — run 1 (model `openai/gpt-6-luna-decisions`, failed)
 
 | Name | What | Recorded |
 |---|---|---|
@@ -49,9 +49,20 @@ From `app/backend`, with the key in the root `.env` (never commit it) and profil
 | `decisions-error-invalid-key` | fake key, 401 | 2026-11-26, 401 `User not found.` |
 | `decisions-error-invalid-model` | non-existent model id | 2026-11-26, 400 `Model … does not exist` |
 
+### S-2 Decisions API — run 2 (`DecisionsCaptureIT`, model `typesafe/jev-1.14`, passed)
+
+Photos are sent as the app uploads them: JPEG with the longest edge ≤ 1568 px (`CaptureFiles.reducedJpeg`; `phone-1.jpg` re-encoded at 900×1200, `laptop-1.png` reduced to 1512×1568).
+
+| Name | What | Recorded |
+|---|---|---|
+| `decisions-jev-return-phone-1` | RETURN, `phone-1.jpg`, 8 questions (noul/choice/score) | 2026-11-26, 200, 1.0 s — all answered; `noul` is a number P(true) without `confidence`; model `typesafe/jev-1.14-20261014` |
+| `decisions-jev-complaint-laptop-1` | COMPLAINT, `laptop-1.png` reduced, 8 questions incl. `damage_type`, `likely_cause` | 2026-11-26, 200, 0.5 s — all answered |
+| `decisions-jev-error-invalid-key` | fake key | 2026-11-26, 401 `User not found.` |
+| `decisions-jev-error-invalid-model` | non-existent model id | 2026-11-26, 400 `Model … does not exist` |
+
 ## Missing captures (shapes without a real recording are not stubbed)
 
-- **S-2 outcome:** no successful Decisions answer exists, because `openai/gpt-6-luna-decisions` returned an upstream 401 `account_deactivated` for both real photo calls. Triage is therefore off (plan fallback F1, ADR-004 Q-T1); no Decisions success stub exists.
+- **S-2:** run 1 (`openai/gpt-6-luna-decisions`) has no success capture (upstream 401). Run 2 (`typesafe/jev-1.14`) has success captures; no `refusal` answer was observed.
 - `response.failed` was not provoked; (g) produced `response.incomplete` instead.
 
 Shapes that cannot be provoked on purpose and will stay missing unless OpenRouter returns them during the spikes:

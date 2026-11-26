@@ -37,6 +37,34 @@ final class CaptureFiles {
         return Files.readAllBytes(IMAGES.resolve(fileName));
     }
 
+    /**
+     * The photo as the app uploads it: the browser re-encodes to JPEG with the longest edge at most 1568 px
+     * (ADR-000 D-06, within Jev's 256-1568 px per side). Photos already within the limit are re-encoded only.
+     */
+    static byte[] reducedJpeg(String fileName) throws IOException {
+        java.awt.image.BufferedImage src = javax.imageio.ImageIO.read(IMAGES.resolve(fileName).toFile());
+        double scale = Math.min(1.0, 1568.0 / Math.max(src.getWidth(), src.getHeight()));
+        int w = (int) Math.round(src.getWidth() * scale);
+        int h = (int) Math.round(src.getHeight() * scale);
+        java.awt.image.BufferedImage dst = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D g = dst.createGraphics();
+        g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.drawImage(src, 0, 0, w, h, null);
+        g.dispose();
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageWriter writer = javax.imageio.ImageIO.getImageWritersByFormatName("jpeg").next();
+        javax.imageio.ImageWriteParam param = writer.getDefaultWriteParam();
+        param.setCompressionMode(javax.imageio.ImageWriteParam.MODE_EXPLICIT);
+        param.setCompressionQuality(0.85f);
+        try (javax.imageio.stream.ImageOutputStream ios = javax.imageio.ImageIO.createImageOutputStream(out)) {
+            writer.setOutput(ios);
+            writer.write(null, new javax.imageio.IIOImage(dst, null, null), param);
+        } finally {
+            writer.dispose();
+        }
+        return out.toByteArray();
+    }
+
     /** Data URL with the media type detected from the magic bytes (file names can lie, see the images README). */
     static String dataUrl(byte[] bytes) {
         return "data:" + mediaType(bytes) + ";base64," + Base64.getEncoder().encodeToString(bytes);

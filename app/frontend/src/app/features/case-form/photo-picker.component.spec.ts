@@ -97,7 +97,7 @@ describe('PhotoPickerComponent', () => {
     expect(button(texts['form.photo.remove'])).toBeTruthy();
     expect(emitted).toHaveLength(1);
     expect(emitted[0]!.file).toBe(file);
-    expect(emitted[0]!.reduced.width).toBe(1600);
+    expect(emitted[0]!.reduced.width).toBe(1568);
   });
 
   it('replaces the photo on a new pick and revokes the old object URL (AC-08)', async () => {

@@ -1,0 +1,34 @@
+{
+  "name" : "decisions-jev-return-phone-1",
+  "description" : "S-2 (a)(b)(c)(d): RETURN, phone-1.jpg (unedited) as jpeg asset; noul, choice and score questions",
+  "capturedAt" : "2026-11-26T11:15:40.507335635Z",
+  "endpoint" : "POST https://openrouter.ai/api/alpha/decisions",
+  "model" : "typesafe/jev-1.14",
+  "requestSummary" : "state=[facts object, asset UUID], assets=1 jpeg, 9 questions (noul/choice/score)",
+  "httpStatus" : 200,
+  "latencyMs" : 1049,
+  "bodyFile" : "decisions-jev-return-phone-1.json",
+  "requestFile" : "decisions-jev-return-phone-1.request.json",
+  "note" : "Authorization, Cookie and Set-Cookie headers are not stored. Body file is verbatim.",
+  "requestHeaders" : {
+    "content-type" : "application/json",
+    "http-referer" : "http://localhost:8080",
+    "x-openrouter-title" : "Hardware Service Decision Copilot PoC"
+  },
+  "responseHeaders" : {
+    ":status" : "200",
+    "access-control-allow-origin" : "*",
+    "access-control-expose-headers" : "WWW-Authenticate,PAYMENT-REQUIRED,Payment-Receipt,PAYMENT-RESPONSE,Location,X-Generation-Id,x-openrouter-error-origin,x-openrouter-error-tool,X-Provider-Name,request-id,x-openrouter-subscription-passthrough,anthropic-ratelimit-unified-status,Retry-After,cf-ray",
+    "alt-svc" : "h3=\":443\"; ma=86400",
+    "cf-ray" : "a60879ffe84bef1a-WAW",
+    "content-type" : "application/json",
+    "date" : "Thu, 26 Nov 2026 11:15:40 GMT",
+    "permissions-policy" : "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+    "referrer-policy" : "no-referrer, strict-origin-when-cross-origin",
+    "server" : "cloudflare",
+    "server-timing" : "cfEdge;dur=36,cfOrigin;dur=0,cfWorker;dur=267",
+    "x-content-type-options" : "nosniff",
+    "x-generation-id" : "gen-dec-1795691740-B6QC0tHr0fWQg3lp0wDR",
+    "x-provider-name" : "TypeSafe"
+  }
+}

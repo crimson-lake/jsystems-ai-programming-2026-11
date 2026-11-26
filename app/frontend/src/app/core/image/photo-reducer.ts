@@ -2,7 +2,7 @@ import { ReducedPhoto } from '../model';
 import { t } from '../../shared/texts.pl';
 
 export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
-export const MAX_EDGE_PX = 1600;
+export const MAX_EDGE_PX = 1568;
 export const JPEG_QUALITY = 0.85;
 
 export type PhotoErrorCode = 'INVALID_TYPE' | 'TOO_LARGE' | 'DECODE_FAILED';
@@ -58,7 +58,7 @@ async function encodeJpeg(bitmap: ImageBitmap, width: number, height: number): P
 
 /**
  * Validates the original file (AC-09/10), applies the EXIF orientation, scales the longest edge
- * to at most 1600 px (never upscales) and re-encodes as JPEG 0.85 (AC-15).
+ * to at most 1568 px (never upscales; the Jev triage model accepts 256-1568 px per side) and re-encodes as JPEG 0.85 (AC-15).
  */
 export async function reducePhoto(file: File): Promise<ReducedPhoto> {
   if (!hasAllowedType(file)) throw new PhotoReduceError('INVALID_TYPE');

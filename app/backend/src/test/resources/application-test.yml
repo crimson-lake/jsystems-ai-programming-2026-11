@@ -5,6 +5,6 @@ openrouter:
   vision-model: test/vision-model
   decision-model: test/decision-model
 triage:
-  mode: "off"
+  mode: "off"   # T29 switches the ITs to assist with recorded Jev stubs
   model: test/triage-model
   base-url: http://localhost:0/api/alpha/decisions   # overridden by WireMock in integration tests

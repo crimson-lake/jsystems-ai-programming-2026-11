@@ -50,6 +50,12 @@ class DecisionsCaptureIT {
     private static final List<String> CATEGORIES =
             List.of("SMARTPHONE", "LAPTOP", "TABLET", "DESKTOP", "MONITOR", "TV", "AUDIO", "WEARABLE", "OTHER");
 
+    /**
+     * Decisions model pinned by the product owner on 2026-11-26 (ADR-004 D-T1 amendment). The first S-2 run with
+     * openai/gpt-6-luna-decisions got an upstream 401 account_deactivated (files decisions-*.json without the jev prefix).
+     */
+    static final String JEV = "typesafe/jev-1.14";
+
     private static String effectiveUrl;
 
     @Autowired
@@ -189,8 +195,8 @@ class DecisionsCaptureIT {
     @Test
     @Order(1)
     void captureReturnWithJpegPhoto() throws Exception {
-        String body = requestBody(triage.model(), "RETURN", "SMARTPHONE", "Galaxy S23", 10,
-                "Zmiana zdania.", CaptureFiles.image("phone-1.jpg"), "jpeg");
+        String body = requestBody(JEV, "RETURN", "SMARTPHONE", "Galaxy S23", 10,
+                "Zmiana zdania.", CaptureFiles.reducedJpeg("phone-1.jpg"), "jpeg");
         String url = url();
         Result r = post(url, openRouter.apiKey(), body);
         if (r.status() == 404 && effectiveUrl == null) {
@@ -201,38 +207,34 @@ class DecisionsCaptureIT {
                 effectiveUrl = url;
             }
         }
-        save("decisions-return-phone-1", "S-2 (a)(b)(c)(d): RETURN, phone-1.jpg (unedited) as jpeg asset; noul, choice and score questions",
-                triage.model(), "state=[facts object, asset UUID], assets=1 jpeg, 9 questions (noul/choice/score)", url, r);
-        // Spike outcome, not a pass/fail gate (ADR-004 D-T1): on 2026-11-26 the model answered with an upstream
-        // 401 account_deactivated, so S-2 failed and triage is off (plan F1). The capture records either outcome.
-        assertThat(r.status()).as("Decisions API status (see capture file)").isIn(200, 401);
-        if (r.status() == 200) {
-            var answers = JSON.readTree(r.body()).path("answers");
-            assertThat(answers.has("photo_usable")).isTrue();
-            assertThat(answers.has("device_category")).isTrue();
-            assertThat(answers.has("condition")).isTrue();
-        }
+        save("decisions-jev-return-phone-1", "S-2 (a)(b)(c)(d): RETURN, phone-1.jpg (unedited) as jpeg asset; noul, choice and score questions",
+                JEV, "state=[facts object, asset UUID], assets=1 jpeg, 9 questions (noul/choice/score)", url, r);
+        assertThat(r.status()).as("Decisions API status (see capture file)").isEqualTo(200);
+        var answers = JSON.readTree(r.body()).path("answers");
+        assertThat(answers.has("photo_usable")).isTrue();
+        assertThat(answers.has("device_category")).isTrue();
+        assertThat(answers.has("condition")).isTrue();
     }
 
     @Test
     @Order(2)
     void captureComplaintWithLargePhoto() throws Exception {
         // laptop-1.png is a JPEG with a .png name (images README): the honest format is jpeg
-        String body = requestBody(triage.model(), "COMPLAINT", "LAPTOP", "ThinkPad T14", 120,
-                "Urządzenie nie działa prawidłowo od kilku dni.", CaptureFiles.image("laptop-1.png"), "jpeg");
+        String body = requestBody(JEV, "COMPLAINT", "LAPTOP", "ThinkPad T14", 120,
+                "Urządzenie nie działa prawidłowo od kilku dni.", CaptureFiles.reducedJpeg("laptop-1.png"), "jpeg");
         Result r = post(url(), openRouter.apiKey(), body);
-        save("decisions-complaint-laptop-1", "S-2: COMPLAINT, laptop-1.png (unedited, JPEG content, 1.2 MB) as jpeg asset",
-                triage.model(), "state=[facts object, asset UUID], assets=1 jpeg, 9 questions incl. damage_type and likely_cause",
+        save("decisions-jev-complaint-laptop-1", "S-2: COMPLAINT, laptop-1.png (unedited, JPEG content, 1.2 MB) as jpeg asset",
+                JEV, "state=[facts object, asset UUID], assets=1 jpeg, 9 questions incl. damage_type and likely_cause",
                 url(), r);
-        assertThat(r.status()).as("Decisions API status (see capture file)").isIn(200, 401);
+        assertThat(r.status()).as("Decisions API status (see capture file)").isEqualTo(200);
     }
 
     @Test
     @Order(3)
     void captureInvalidKey() throws Exception {
-        Result r = post(url(), FAKE_KEY, minimalBody(triage.model()));
-        save("decisions-error-invalid-key", "S-2 (e): invalid API key (literal fake key) -> real 401",
-                triage.model(), "text-only state, 1 noul question; Authorization carries a literal fake key (not stored)", url(), r);
+        Result r = post(url(), FAKE_KEY, minimalBody(JEV));
+        save("decisions-jev-error-invalid-key", "S-2 (e): invalid API key (literal fake key) -> real 401",
+                JEV, "text-only state, 1 noul question; Authorization carries a literal fake key (not stored)", url(), r);
         assertThat(r.status()).isEqualTo(401);
     }
 
@@ -240,7 +242,7 @@ class DecisionsCaptureIT {
     @Order(4)
     void captureInvalidModel() throws Exception {
         Result r = post(url(), openRouter.apiKey(), minimalBody(INVALID_MODEL));
-        save("decisions-error-invalid-model", "S-2 (e): non-existent decisions model id -> real error shape",
+        save("decisions-jev-error-invalid-model", "S-2 (e): non-existent decisions model id -> real error shape",
                 INVALID_MODEL, "text-only state, 1 noul question", url(), r);
         assertThat(r.status()).isBetween(400, 499);
     }

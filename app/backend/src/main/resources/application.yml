@@ -42,8 +42,8 @@ openrouter:
   app-url: ${OPENROUTER_APP_URL:http://localhost:8080}
 
 triage:
-  mode: ${TRIAGE_MODE:off}   # S-2 failed on 2026-11-26 (plan F1, ADR-004 Q-T1)
-  model: ${LLM_TRIAGE_MODEL:openai/gpt-6-luna-decisions}
+  mode: ${TRIAGE_MODE:assist}
+  model: ${LLM_TRIAGE_MODEL:typesafe/jev-1.14}
   low-confidence: ${TRIAGE_LOW_CONFIDENCE:0.80}
   high-confidence: ${TRIAGE_HIGH_CONFIDENCE:0.95}
   safety-probability: ${TRIAGE_SAFETY_PROBABILITY:0.30}
