@@ -175,3 +175,18 @@ Screenshots from per-task QA and phase gates (plan §4.5). Each entry gives the 
 | — | `ai.call` (`q4.log`) | 64 lines, all OK: TRIAGE 15 (`typesafe/jev-1.14`), VISION 16 (form + chat), DECISION 17, STREAM 16 |
 
 - **Second finding:** a client disconnect on an SSE stream was logged as an unhandled ERROR with a stack trace → fixed (logged at DEBUG).
+
+## Q5 — Phase 5 gate, final JAR regression (2026-11-26)
+
+- **App commit:** `0fab921` (final JAR; `./mvnw clean verify`: Surefire 283, Failsafe 64, Vitest 274, JaCoCo met, 0 warnings). Real OpenRouter on `:8080`, invalid key on `:8081`.
+- **Result: all checks PASS, no defect.** Labels recorded, not pre-assumed.
+
+| Files | Step | Result |
+|---|---|---|
+| `Q5/01`–`03-return-*` (1280, 390) | RETURN with `phone-1.jpg` / `phone-2.jpeg` | Odrzucone (cracked screen, suggests a complaint) / Wstępnie przyjęte |
+| `Q5/04`–`05-complaint-*` (1280, 390) | COMPLAINT with `laptop-1.png` | Przekazane do specjalisty (`[C8]`, description vs photo) |
+| `Q5/06`–`08-chat-photo-*` | Chat photo turn with `laptop-2.webp` | Reply streamed; decision unchanged |
+| `Q5/09-new-case-dialog-*`, `Q5/10-after-new-case-empty-form-1280` | "Nowa sprawa" | Focus on "Anuluj"; confirm → empty form; `DELETE` → 204 |
+| `Q5/11-error-banner-390`, `Q5/11-error-banner-1280` | Invalid-key instance | Banner focused and in view; "Spróbuj ponownie" fully visible at 390 (Q4 fix confirmed); data and photo kept |
+| — | Console | 0 errors, 0 warnings |
+| — | `ai.call` (`q5.log`) | Every case: TRIAGE (`typesafe/jev-1.14`), VISION, DECISION, STREAM all OK; chat photo turn: VISION, DECISION, STREAM OK; 0 ERROR/WARN lines. Invalid-key log: TRIAGE and VISION `status=ERROR` |
