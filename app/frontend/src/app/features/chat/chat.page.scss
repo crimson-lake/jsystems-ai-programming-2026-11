@@ -1,0 +1,37 @@
+:host {
+  display: block;
+}
+
+.chat {
+  display: block;
+}
+
+.chat--wide {
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--app-radius);
+  background: var(--mat-sys-surface);
+}
+
+.chat__side {
+  width: 320px;
+  border-right: 1px solid var(--mat-sys-outline-variant);
+  background: var(--mat-sys-surface);
+}
+
+.chat__main {
+  min-width: 0;
+  min-height: 480px;
+}
+
+.chat--narrow {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.chat__panel {
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--app-radius);
+  box-shadow: none;
+}

@@ -1,0 +1,35 @@
+<article class="assistant" data-testid="assistant-message" [attr.data-state]="state()">
+  @if (showSafety()) {
+    <div class="assistant__safety" data-testid="safety-block" role="note" [innerHTML]="safetyText | markdown"></div>
+  }
+  @if (changed()) {
+    <div class="assistant__change" data-testid="decision-change-block">
+      <p class="assistant__change-title">{{ changeTitle }}</p>
+      <p class="assistant__change-badges">
+        @if (decision()?.previousLabel; as previous) {
+          <app-decision-badge [label]="previous" />
+          <span aria-hidden="true">→</span>
+        }
+        <app-decision-badge [label]="decision()!.label" />
+      </p>
+      @if (decision()?.changeReasonPl; as reason) {
+        <p class="assistant__change-reason">{{ reason }}</p>
+      }
+    </div>
+  }
+  @if (message().isFirst) {
+    <p class="assistant__greeting" data-testid="assistant-greeting">{{ greetingText }}</p>
+  }
+  @if (showBadge()) {
+    <div class="assistant__badge" data-testid="decision-badge">
+      <app-decision-badge [label]="decision()!.label" />
+    </div>
+  }
+  <div class="assistant__body" [innerHTML]="shownText() | markdown"></div>
+  @if (showBadge()) {
+    <p class="assistant__disclaimer" data-testid="disclaimer">{{ disclaimerText }}</p>
+  }
+  <time class="assistant__time" [attr.datetime]="message().createdAt.toISOString()">{{
+    message().createdAt | date: 'HH:mm'
+  }}</time>
+</article>

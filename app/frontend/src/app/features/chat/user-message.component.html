@@ -1,0 +1,27 @@
+<div class="user" [class.user--failed]="failed()">
+  <div class="user__bubble">
+    @if (message().photoUrl; as url) {
+      <button class="user__photo" type="button" [attr.aria-label]="enlargeLabel" (click)="enlarge()">
+        <img [src]="url" [alt]="photoAlt" />
+      </button>
+    }
+    @if (message().text) {
+      <p class="user__text">{{ message().text }}</p>
+    }
+  </div>
+  <time class="user__time" [attr.datetime]="message().createdAt.toISOString()">{{
+    message().createdAt | date: 'HH:mm'
+  }}</time>
+  @if (failed()) {
+    <div class="user__error" role="alert">
+      <span>{{ errorText() }}</span>
+      @if (expired()) {
+        <button mat-flat-button class="app-secondary" type="button" (click)="startNewCase()">
+          {{ newCaseText }}
+        </button>
+      } @else {
+        <button mat-stroked-button type="button" (click)="retry()">{{ retryText }}</button>
+      }
+    </div>
+  }
+</div>

@@ -66,6 +66,7 @@
     [caseType]="photoType"
     [disabled]="busy()"
     [showRequired]="photoRequired()"
+    [initial]="restoredPhoto"
     (photoChange)="onPhotoChange($event)"
   />
 

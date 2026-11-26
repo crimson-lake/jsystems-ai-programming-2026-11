@@ -1,0 +1,38 @@
+<section class="summary" data-testid="case-summary">
+  @if (showTitle()) {
+    <h2 class="summary__title">{{ title }}</h2>
+  }
+  @if (store.form(); as form) {
+    <dl class="summary__list">
+      <div class="summary__row">
+        <dt>{{ labels.caseType }}</dt>
+        <dd>{{ caseTypeText() }}</dd>
+      </div>
+      <div class="summary__row">
+        <dt>{{ labels.category }}</dt>
+        <dd>{{ categoryText() }}</dd>
+      </div>
+      <div class="summary__row">
+        <dt>{{ labels.model }}</dt>
+        <dd>{{ form.model }}</dd>
+      </div>
+      <div class="summary__row">
+        <dt>{{ labels.purchaseDate }}</dt>
+        <dd>{{ form.purchaseDate | date: 'dd.MM.yyyy' }}</dd>
+      </div>
+    </dl>
+  }
+  @if (store.formPhoto(); as photo) {
+    <button class="summary__photo" type="button" [attr.aria-label]="enlargeLabel" (click)="enlarge()">
+      <img data-testid="summary-thumbnail" [src]="photo.objectUrl" [alt]="photoAlt" />
+    </button>
+  }
+  @if (store.decision(); as decision) {
+    <div class="summary__badge" data-testid="summary-decision-badge">
+      <app-decision-badge [label]="decision.label" />
+    </div>
+  }
+  <button mat-flat-button class="app-secondary summary__new" type="button" (click)="startNewCase()">
+    {{ newCaseText }}
+  </button>
+</section>

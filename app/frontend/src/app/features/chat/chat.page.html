@@ -1,0 +1,28 @@
+<ng-template #chat>
+  <app-message-list />
+  <!-- T34: the composer (textarea, attach, send) goes here. -->
+  <div class="chat__composer-slot"></div>
+</ng-template>
+
+@if (wide()) {
+  <mat-sidenav-container class="chat chat--wide" autosize>
+    <mat-sidenav class="chat__side" mode="side" opened disableClose>
+      <app-case-summary [showTitle]="true" />
+    </mat-sidenav>
+    <mat-sidenav-content class="chat__main">
+      <ng-container [ngTemplateOutlet]="chat" />
+    </mat-sidenav-content>
+  </mat-sidenav-container>
+} @else {
+  <div class="chat chat--narrow">
+    <mat-expansion-panel class="chat__panel">
+      <mat-expansion-panel-header>
+        <mat-panel-title>{{ summaryTitle }}</mat-panel-title>
+      </mat-expansion-panel-header>
+      <app-case-summary />
+    </mat-expansion-panel>
+    <div class="chat__main">
+      <ng-container [ngTemplateOutlet]="chat" />
+    </div>
+  </div>
+}

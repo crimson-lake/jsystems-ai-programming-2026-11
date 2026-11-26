@@ -70,5 +70,8 @@
   "datepicker.prevMultiYear": "Poprzednie 24 lata",
   "datepicker.nextMultiYear": "Następne 24 lata",
   "datepicker.toMonthView": "Wybierz miesiąc i rok",
-  "datepicker.toMultiYearView": "Wybierz rok"
+  "datepicker.toMultiYearView": "Wybierz rok",
+  "common.close": "Zamknij",
+  "chat.photo.enlarge": "Powiększ zdjęcie",
+  "chat.list.label": "Rozmowa z asystentem"
 }

@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  OnInit,
   computed,
   input,
   output,
@@ -32,11 +33,13 @@ export interface PickedPhoto {
   styleUrl: './photo-picker.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class PhotoPickerComponent {
+export class PhotoPickerComponent implements OnInit {
   readonly caseType = input<CaseType | null>(null);
   readonly disabled = input(false);
   /** Page tells the picker that the missing photo should be flagged (touched/submitted). */
   readonly showRequired = input(false);
+  /** Photo to show on init without a new pick, e.g. the one kept after a failed submit (AC-40). */
+  readonly initial = input<PickedPhoto | null>(null);
   readonly photoChange = output<PickedPhoto | null>();
 
   protected readonly label = FORM_LABELS.photo;
@@ -67,6 +70,11 @@ export class PhotoPickerComponent {
   private readonly pickButton = viewChild.required('pickButton', {
     read: ElementRef<HTMLButtonElement>,
   });
+
+  ngOnInit(): void {
+    const initial = this.initial();
+    if (initial) this.photo.set(initial);
+  }
 
   focus(): void {
     this.pickButton().nativeElement.focus();

@@ -126,6 +126,8 @@ export class CaseFormPage {
   private readonly picker = viewChild(PhotoPickerComponent);
 
   private lastSubmission: { value: CaseFormValue; photo: ReducedPhoto } | null = null;
+  /** Photo kept by the store after a failed first submit; the picker shows it again (AC-40). */
+  protected readonly restoredPhoto: PickedPhoto | null = null;
 
   constructor() {
     this.form.controls.caseType.valueChanges.subscribe(() =>
@@ -135,6 +137,21 @@ export class CaseFormPage {
       if (this.busy()) this.form.disable({ emitEvent: false });
       else this.form.enable({ emitEvent: false });
     });
+
+    const saved = this.submitter.form?.();
+    const savedPhoto = this.submitter.formPhoto?.();
+    if (saved && savedPhoto) {
+      this.restoredPhoto = { file: saved.photo, reduced: savedPhoto };
+      this.lastSubmission = { value: saved, photo: savedPhoto };
+      this.form.patchValue({
+        caseType: saved.caseType,
+        category: saved.category,
+        model: saved.model,
+        purchaseDate: saved.purchaseDate,
+        reason: saved.reason,
+        photo: this.restoredPhoto,
+      });
+    }
   }
 
   protected onPhotoChange(photo: PickedPhoto | null): void {

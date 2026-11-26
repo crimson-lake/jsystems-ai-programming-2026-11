@@ -11,6 +11,12 @@ export abstract class CaseSubmitter {
   abstract readonly progressStep: Signal<ProgressStep | null>;
   abstract readonly submitting: Signal<boolean>;
   abstract readonly submitError: Signal<boolean>;
+  /**
+   * Values and reduced photo of the last submit, kept by the store after a failed first submit so
+   * the form can restore them (AC-40). Optional: a plain submitter may not keep them.
+   */
+  readonly form?: Signal<CaseFormValue | null>;
+  readonly formPhoto?: Signal<ReducedPhoto | null>;
   abstract submit(form: CaseFormValue, photo: ReducedPhoto): void;
 }
 
