@@ -147,7 +147,7 @@ Field names must be identical in Java and TypeScript (e.g. `caseId`, `additional
 |---|---|---|---|
 | `CaseSession` | One customer case | `caseId` (UUID v4), `caseType` (RETURN/COMPLAINT), `form` (`CaseForm`), `triage` (optional `TriageResult`, ADR-004), `analyses` (list of `ImageAnalysis`), `messages` (list of `ChatMessage`), `currentDecision` (`Decision`), `additionalPhotoCount` (0–3), `createdAt` | In Caffeine until 60 min without access; deleted on "Nowa sprawa" |
 | `CaseForm` | Validated form data | `caseType`, `category` (enum of 9, AC-03), `model` (2–100), `purchaseDate` (LocalDate), `reason` (0–2000) | Inside `CaseSession` |
-| `ImageAnalysis` | Structured output of the vision model | `photoUsable`, `photoProblem`, `matchesCategory`, `damageVisible`, `damageType`, `damageLocation`, `likelyCause` (MANUFACTURING_DEFECT/IMPACT/LIQUID/WEAR/UNKNOWN), `causeConfidence` (HIGH/MEDIUM/LOW), `signsOfUse`, `visibleAccessories`, `resellableAsNew`, `safetyHazard`, `summaryPl` | Inside `CaseSession`. **The photo bytes are discarded after analysis** |
+| `ImageAnalysis` | Structured output of the vision model. **Typed field table: [ADR-001 §4](001-llm-integration.md#4-data-structures)** (authoritative) | `photoUsable`, `photoProblem`, `matchesCategory`, `damageVisible`, `damageType`, `damageLocation`, `likelyCause`, `causeConfidence`, `signsOfUse`, `visibleAccessories`, `resellableAsNew`, `safetyHazard`, `summaryPl`, `triageDisagreements`, `source` | Inside `CaseSession`. **The photo bytes are discarded after analysis** |
 | `Decision` | Machine-readable decision | `label` (ACCEPTED_PRELIMINARY/REJECTED/NEEDS_MORE_INFO/ESCALATED), `ruleIds` (list), `reasonCode`, `suggestOtherCaseType` (enum `NONE \| RETURN \| COMPLAINT`), `safety` (bool), `changeReasonPl` | `currentDecision` + snapshot on each assistant message |
 | `ChatMessage` | One chat turn | `id`, `role` (USER/ASSISTANT), `text` (markdown for the assistant), `clientMessageId` (user only), `hasPhoto`, `analysisIndex` (optional), `decisionSnapshot`, `changed`, `previousLabel`, `createdAt` | Inside `CaseSession` |
 | `SseEvent` | Wire event to the browser | `type` + JSON payload (§6) | Transient |
@@ -161,7 +161,7 @@ The API base path is `/api`. It is JSON except for multipart uploads and SSE str
 | Endpoint | Input | Output | Errors |
 |---|---|---|---|
 | `POST /api/cases` | `multipart/form-data`: `form` (JSON part `CaseForm`, `purchaseDate` as `YYYY-MM-DD`), `photo` (JPEG/PNG/WebP, ≤10 MB, already reduced by the browser) | `text/event-stream`: `case` → `progress`+ → `decision` → `progress(WRITING_REPLY)` → `delta`* → `done`, or `error` at any point after `case` | Before the stream starts: 400 `{code, fieldErrors[]}` or 413. Inside the stream: event `error {code, message}` |
-| `POST /api/cases/{caseId}/messages` | `multipart/form-data`: `clientMessageId` (UUID), `text` (0–2000; must be 1–2000 when there is no photo), optional `photo` | `text/event-stream`: `progress`+ → `decision` → `progress(WRITING_REPLY)` → `delta`* → `done`, or `error`. A `clientMessageId` that is already committed **replays** the committed turn (ADR-002 §3.4) | 404 unknown/expired case, 409 `CASE_BUSY` (a turn is already running), 422 photo limit reached (AC-33), stream `error` |
+| `POST /api/cases/{caseId}/messages` | `multipart/form-data`: `clientMessageId` (UUID), `text` (0–2000; must be 1–2000 when there is no photo), optional `photo` | `text/event-stream`: `progress`+ → `decision` → `progress(WRITING_REPLY)` → `delta`* → `done`, or `error`. A `clientMessageId` that is already committed **replays** the committed turn (ADR-002 §3.4) | 400 validation, 404 unknown/expired case, 409 `CASE_BUSY` (a turn is already running), 413 photo too large, 422 photo limit reached (AC-33), stream `error`. The check order is in ADR-002 §3.4 |
 | `DELETE /api/cases/{caseId}` | — | 204 | Idempotent: also returns 204 for an unknown case |
 | `GET /actuator/health` | — | `{status}` | Used to verify startup |
 
@@ -186,7 +186,10 @@ The API base path is `/api`. It is JSON except for multipart uploads and SSE str
 - The **single local `.env` at the repository root** (the same folder as `.env.example`; gitignored). It is imported through `spring.config.import=optional:file:.env[.properties],optional:file:../../.env[.properties]`:
   - the first path matches `java -jar` started from the repository root;
   - the second path matches `./mvnw` started from `app/backend`.
-- Tests never read `.env`. They use `app/backend/src/test/resources/application-test.yml` with dummy values and WireMock URLs (ADR-002 §8).
+- **Profiles:**
+  - The `.env` import is declared in a document of `application.yml` that is **inactive under the `test` profile** (`spring.config.activate.on-profile: "!test"`).
+  - Unit tests and `*IT` tests run with profile `test` (`application-test.yml`: dummy values, WireMock URLs), so they **never load `.env`**.
+  - Only the `capture` and `eval` tests, which the orchestrator runs on purpose against the real API, use profile **`real-api`**. They load the real key from the root `.env` or the process environment, and the real base URLs (ADR-002 §3.9).
 
 | Variable | Purpose | Required | Example value |
 |---|---|---|---|
@@ -517,7 +520,8 @@ TDD, following `AGENTS.md`:
 - AI evals check decision quality against the policies, because unit tests cannot prove that the model follows the policy.
   - Per PRD §12 (2026-11-26), evals assert only outcomes that follow from **form data and policy**: time windows, safety wording, prompt injection, cited rule IDs.
   - For the example photos, the model's assessment is **recorded, never pre-assumed** (`assets/example-images/README.md`).
-  - No generated or edited images are used in upload, E2E or eval tests.
+  - No generated or edited images are used in upload, E2E or eval tests. The only exception is byte-level fixtures in the photo validator and reducer unit tests (PRD §12).
+  - Assertions on form-driven outcomes allow for safety precedence: an outside-window case expects REJECTED, or ESCALATED with `R7.1`/`C7.1` when the recorded analysis or triage flagged a hazard.
 - **Test discovery:**
   - Unit tests are `*Test` classes, run by Surefire (`./mvnw test`).
   - Integration tests are `*IT` classes, run by Failsafe (`./mvnw verify`).
@@ -539,7 +543,7 @@ TDD, following `AGENTS.md`:
 | Scenario | Input | Expected | Edge cases |
 |---|---|---|---|
 | Return happy path | RETURN, smartwatch, bought 10 days ago, clean photo | SSE order: `case`, `progress`, `decision` (ACCEPTED_PRELIMINARY), `delta`+, `done`. The message has all AC-22 sections and the disclaimer | Text arrives in many deltas |
-| Return outside window | Purchased 45 days ago | REJECTED. The text contains "45" and "30" (AC-24) | Exactly 30 days → still inside the window |
+| Return outside window | Purchased 45 days ago | REJECTED with "45" and "30" in the text (AC-24), **unless** the recorded analysis or triage triggered G1 safety, in which case ESCALATED with `R7.1` (tests must not pre-assume the photo content) | Exactly 30 days → still inside the window |
 | Complaint older than 2 years | Purchased 2 years + 1 day ago | REJECTED and mentions the manufacturer warranty (AC-25) | Leap day |
 | Safety | Analysis `safetyHazard=true`, triage safety signal, or a safety word in the text | ESCALATED, `safety=true`, `R7.1`/`C7.1`, and the message starts with the safety block (AC-26) | Purchase 45 days ago + safety → still ESCALATED (PRD §11 precedence) |
 | Low confidence complaint | `causeConfidence=LOW`, model says REJECTED | The guardrail changes it to ESCALATED (AC-27) | — |
@@ -560,5 +564,5 @@ TDD, following `AGENTS.md`:
 - TAC-04: No HTTP response or SSE event body contains a stack trace, model name, prompt text or the API key (asserted in integration tests, AC-42).
 - TAC-05: The OpenRouter API key never appears in logs at INFO level or above, or in any frontend bundle.
 - TAC-06: With WireMock stubs, the first `delta` arrives within 2 s of request start. With the real model, the `decision` event arrives within 60 s (AC-29).
-- TAC-07: The AI eval suite passes 100% of its form- and policy-driven cases before a release demo: time windows, safety wording, prompt injection, and cited rule IDs ⊆ the applied policy. The report lists every example photo's recorded assessment without pass/fail.
+- TAC-07: The AI eval suite passes 100% of its form- and policy-driven cases before a release demo: time windows (with the safety-precedence allowance above), safety wording, prompt injection, and cited rule IDs ⊆ the applied policy. The report lists every example photo's recorded assessment without pass/fail.
 - TAC-08: Playwright E2E flows pass at 360 px and 1280 px, the scroll check passes at all widths of ADR-003 TAC-003-05 (AC-46), and there are no console errors.

@@ -50,7 +50,7 @@
 | `PolicyRepository` | Loads `classpath:policies/return-policy.md` and `complaint-policy.md`. Extracts the **set of valid rule IDs** per policy with the patterns `^## (R\|C)\d+\.` (section IDs, e.g. `R6`, `C8`) and `^(R\|C)\d+\.\d+\.` (sub-rule IDs, e.g. `R2.3`). Currently valid: `R1–R7, R1.1…R5.3, R7.1` and `C1–C8, C1.1…C7.1` |
 | `ImageAnalysisService` | Builds the vision request for the case type and returns a typed `ImageAnalysis` |
 | `DecisionService` | Step 1 makes the structured decision, step 2 runs `RuleIdValidator` and then `Guardrails`, and step 3 streams the message through `RuleIdStreamFilter` |
-| `RuleIdStreamFilter` | Enforces AC-23 on the streamed text (§3.4): passes deltas through, but holds back any partial token matching `[RC]\d+(\.\d+)?` until it is complete. Removes any complete ID that is not in `decision.ruleIds`. Logs every removal at WARN with the case ID |
+| `RuleIdStreamFilter` | Enforces AC-23 on the streamed text (§3.4).<br>• The message prompts require rule IDs to be written **in square brackets**, e.g. `[R2.3]`. The filter acts **only on bracketed tokens** `\[[RC]\d{1,2}(\.\d{1,2})?\]`, so model names such as "LG C3" or "Canon R5" are never touched.<br>• It passes deltas through, but holds back a partial `[`… token until the token is complete or proves not to be an ID.<br>• It removes any bracketed ID that is not in `decision.ruleIds` and logs each removal at WARN with the case ID.<br>• **The filtered text** is what is stored in history and used for replay.<br>• Unbracketed ID-like text is left as is but counted in the eval report |
 | `Guardrails` | Deterministic overrides (§3.4). Pure functions with no I/O |
 | `CaseFacts` | Computed facts: `today` (Europe/Warsaw), `daysSincePurchase`, `returnWindowExceeded`, `complaintPeriodExceeded` |
 
@@ -64,8 +64,8 @@ The PRD requires four distinct instruction sets (PRD §8). Two auxiliary prompts
 | `vision-complaint.md` | Image analysis, COMPLAINT | Report: damage visible, type, location, likely cause (enum), confidence (enum), usable photo, category match, safety hazard. Fill `summaryPl` (AC-17, AC-18) |
 | `decision-return.md` | Structured decision, RETURN | Role, the four labels with their criteria (PRD §11 table), and the "allowed / not allowed" lists. Only Return Policy rule IDs may be cited. Includes `{{policy}}` (the full Return Policy) |
 | `decision-complaint.md` | Structured decision, COMPLAINT | Same structure with the Complaint Policy, plus C7 safety and C8 escalation |
-| `message-first.md` | Streamed first message | Polish, informal "Ty" form, at most about 250 words. Exactly three `###` sections: "Co widzimy na zdjęciu", "Uzasadnienie" (it may cite **only** the IDs in `decision.ruleIds`, which are listed in the input), "Kolejne kroki" (numbered list). No greeting, badge, safety block or disclaimer: the UI adds those (§3.5). Mention the other case type when `suggestOtherCaseType` is set (AC-28) |
-| `message-reply.md` | Streamed chat reply | Answer using the full context. If `changed=true`, explain the new decision with the same three sections; otherwise answer the question. Cite only IDs in `decision.ruleIds`. Covers off-topic refusal, no promises, no repair instructions, Polish only (AC-45). When the photo limit is reached and the label is still NEEDS_MORE_INFO, the next steps tell the customer to bring the device to a Store shop (R5.1 / C6.1, PRD §12) |
+| `message-first.md` | Streamed first message | Polish, informal "Ty" form, at most about 250 words. Exactly three `###` sections: "Co widzimy na zdjęciu", "Uzasadnienie" (it may cite **only** the IDs in `decision.ruleIds`, which are listed in the input, always written in square brackets such as `[R2.3]`), "Kolejne kroki" (numbered list). No greeting, badge, safety block or disclaimer: the UI adds those (§3.5). Mention the other case type when `suggestOtherCaseType` is set (AC-28) |
+| `message-reply.md` | Streamed chat reply | Answer using the full context. If `changed=true`, explain the new decision with the same three sections; otherwise answer the question. Cite only IDs in `decision.ruleIds`, in square brackets. Covers off-topic refusal, no promises, no repair instructions, Polish only (AC-45). When the photo limit is reached and the label is still NEEDS_MORE_INFO, the next steps tell the customer to bring the device to a Store shop for in-person assessment, **without citing rule IDs** unless they are in `decision.ruleIds` (PRD §12 assumption, to be confirmed before T25) |
 
 Prompt rules that apply to every file:
 - Customer-provided text (reason, chat messages) is passed **only** inside clearly delimited input items labelled as customer data.
@@ -107,7 +107,10 @@ The pipeline is **two steps per turn** (decision D-L2):
    2. **G1–G5**: the first matching rule wins and records `overriddenBy`.
       - An override **replaces** `ruleIds` with the enforced ID(s) from the table, followed by the model's remaining IDs, which are kept only if the overriding rule is G4 (photo problem, where the model's IDs still explain the request). At most 5 IDs.
       - An override also sets `reasonCode` (G1 → `SAFETY`, G2/G3 → `OUTSIDE_WINDOW`, G4 → `PHOTO_UNUSABLE` or `CATEGORY_MISMATCH`, G5 → `UNCERTAIN_CAUSE`).
-   3. **`changeReasonPl`**: when the final label differs from `currentDecision.label` and the label was set by a guardrail, it is replaced by a **fixed Polish text per guardrail** from `classpath:messages/guardrail-reasons.pl.properties`. Otherwise the model's text is kept. Strict-schema limits (1–5 IDs, ≤ 300 chars) are also enforced in code, because structured-output compliance "is not guaranteed on every endpoint".
+   3. **`changeReasonPl`**: when the final label differs from `currentDecision.label`:
+      - if the label was set by a guardrail, it is replaced by a **fixed Polish text per guardrail** from `classpath:messages/guardrail-reasons.pl.properties`;
+      - if the model changed the label but left the reason empty, the fallback key `model.default` is used: "Na podstawie nowych informacji zmieniliśmy ocenę Twojego zgłoszenia.";
+      - otherwise the model's text is kept. Strict-schema limits (1–5 IDs, ≤ 300 chars) are also enforced in code, because structured-output compliance "is not guaranteed on every endpoint".
 3. **Streamed message**:
    - Call `responses.createStreaming` with `message-first.md` or `message-reply.md`.
    - Use reasoning effort `low`.
@@ -137,6 +140,7 @@ G6 (rule-ID validation) is described in step 2.1 above and always runs **before*
 
 **Revision rule:**
 - `changed = (validated label ≠ currentDecision.label)`.
+- On the **first decision** there is no current decision, so `changed=false` and `previousLabel=null`.
 - The "Zmiana decyzji" block is driven only by this computed flag, never by the model's text (AC-35, AC-36).
 - `safety` is a property of the current decision. Once a case is ESCALATED for safety, later replies keep `safety=true` in their decision snapshot, but the UI shows the safety block only on messages that also show a badge (§3.5).
 
@@ -198,7 +202,25 @@ To make AC-22, AC-26 and AC-35 order-proof, the assistant message is rendered fr
 ## 4. Data Structures
 
 - `LlmRequest`: `model`, `instructions` (string), `inputItems` (ordered list of `{role, text}` or `{role, text, imageDataUrl}`), `reasoningEffort` (`none|low|medium|high`), `schema` (optional Java class), `timeout`.
-- `ImageAnalysis`: a structured output class. The fields are listed in ADR-000 §5. All enums are closed, and the strings are limited to 500 characters.
+- **`ImageAnalysis`** (authoritative typed table; it defines the strict JSON schema captured in S-1). All enums are closed. Code enforces the limits too.
+
+  | Field | Type | Notes |
+  |---|---|---|
+  | `photoUsable` | boolean | AC-18 |
+  | `photoProblem` | enum `NONE \| BLURRY \| TOO_DARK \| NO_DEVICE \| DEVICE_NOT_FULLY_VISIBLE \| DAMAGE_NOT_SHOWN \| OTHER` | AC-19 |
+  | `matchesCategory` | boolean | AC-18 |
+  | `damageVisible` | boolean | AC-16/17 |
+  | `damageType` | enum `NONE \| SCREEN_CRACK \| IMPACT_DENT \| BROKEN_PART \| LIQUID \| BURN_OR_SWELLING \| COSMETIC_WEAR \| DISPLAY_DEFECT \| OTHER` | Same values as triage `damage_type` |
+  | `damageLocation` | string ≤ 200 chars, may be empty | Free text, e.g. "lewy zawias" |
+  | `likelyCause` | enum `MANUFACTURING_DEFECT \| IMPACT \| LIQUID \| WEAR \| UNKNOWN` | AC-17 |
+  | `causeConfidence` | enum `HIGH \| MEDIUM \| LOW` | AC-17, G5 |
+  | `signsOfUse` | boolean | AC-16 |
+  | `visibleAccessories` | list of enum `PROTECTIVE_FILM \| ORIGINAL_BOX \| CHARGER \| CABLE \| MANUAL \| OTHER`, max 6 | AC-16 |
+  | `resellableAsNew` | boolean | AC-16 |
+  | `safetyHazard` | boolean | G1 |
+  | `summaryPl` | string ≤ 500 chars | "Co widzimy na zdjęciu" |
+  | `triageDisagreements` | list of `{key: string, triageValue: string, llmValue: string}`, max 10, may be empty | ADR-004 §3.4 |
+  | `source` | enum `LLM \| TRIAGE` | Set by code, not by the model (excluded from the model schema) |
 - `DecisionResult`: §3.4.
 - `Decision` (validated): `DecisionResult` (with `changeReasonPl` possibly replaced, §3.4) + `safety` + `changed` + `previousLabel` + `overriddenBy` (`G1…G6` or empty).
 - `StreamResult`: `fullText`, `inputTokens`, `outputTokens`, `finishStatus` (`COMPLETED|FAILED|INCOMPLETE|CANCELLED`).
@@ -413,7 +435,9 @@ sequenceDiagram
 | Rule-ID extraction | Unit | Current policy files | The ID sets equal the lists in §3.1 | A new sub-rule added → picked up |
 | Guardrail G1 safety | Unit | Analysis `safetyHazard=true`, model ACCEPTED | ESCALATED, `safety`, `C7.1` (complaint) / `R7.1` (return) | Lexicon match in the chat text only, incl. "napuchnięta", "nadpalony", "przegrzewa się", "ogień" with and without diacritics; triage P(true)=0.30/0.29; **RETURN 45 days old + safety → ESCALATED, not REJECTED** |
 | Guardrail ID replacement | Unit | G2 overrides a model ACCEPTED with `R3.1` | ruleIds = `[R2.3]`, reasonCode `OUTSIDE_WINDOW`, fixed `changeReasonPl` when the label changed | G4 keeps the model's IDs |
-| Stream rule-ID filter | Unit | Deltas `"…zgodnie z R"`, `"9.9 i R2."`, `"3."` with decision IDs `[R2.3]` | Output text contains `R2.3` and not `R9.9`; a WARN is logged | ID split across 3 deltas; text ending with a partial `R` |
+| Stream rule-ID filter | Unit | Deltas `"…zgodnie z [R"`, `"9.9] i [R2."`, `"3]."` with decision IDs `[R2.3]` | Output contains `[R2.3]` and not `[R9.9]`; a WARN is logged; the stored text is the filtered one | ID split across 3 deltas; text ending with a partial `[R`; "LG C3" and "Canon R5" unchanged |
+| First decision flags | Unit | No current decision | `changed=false`, `previousLabel=null` | — |
+| Empty model change reason | Unit | Model changes the label, `changeReasonPl=""` | Fallback `model.default` text | — |
 | Guardrail G2 window | Unit | RETURN, purchase = today − 30 / − 31 days | ACCEPTED allowed / REJECTED with `R2.3` | Purchase today (0 days) |
 | Guardrail G3 | Unit | COMPLAINT, purchase = today − 2y / − 2y − 1d | Allowed / REJECTED with `C2.3` | 29 February purchase |
 | Guardrail G5 | Unit | COMPLAINT, LOW confidence, model REJECTED | ESCALATED with `C8` | MEDIUM confidence → REJECTED kept |
@@ -422,13 +446,13 @@ sequenceDiagram
 | Stream mapping | Unit | Fake event sequence incl. reasoning deltas and `response.failed` | Only text deltas forwarded; FAILED → `LlmUnavailable` | Zero deltas then completed |
 | Structured call via WireMock | Integration | Stub = capture S-1(b) | `DecisionResult` parsed | Stub with an invalid enum → `AI_UNAVAILABLE` (no automatic retry) |
 | Streaming via WireMock | Integration | Stub = capture S-1(c) as an SSE body | Deltas in order and usage logged | Stub with a 502; stub stalls past the timeout |
-| AI evals | Eval (real model) | `app/evals/cases/*.json`: about 15 cases, combining the 5 unedited example photos with form data. The **expectations come only from the form and the policy** (PRD §12, 2026-11-26):<br>• return 31 / 45 days → REJECTED `R2.3`;<br>• complaint > 2 years → REJECTED `C2.3`;<br>• safety wording in the reason → ESCALATED `R7.1`/`C7.1`;<br>• prompt-injection reason → not ACCEPTED solely because of the injection;<br>• every cited ID ⊆ the applied policy;<br>• Polish reply to an English question (AC-45) | 100% on these assertions. For every photo, the model's `ImageAnalysis` and label are **recorded in the report without pass/fail**, because the README forbids pre-assuming what the model sees | Run 3× to detect flakiness |
+| AI evals | Eval (real model) | `app/evals/cases/*.json`: about 15 cases, combining the 5 unedited example photos with form data. The **expectations come only from the form and the policy** (PRD §12, 2026-11-26):<br>• return 31 / 45 days → REJECTED `R2.3`, **or** ESCALATED `R7.1` if the recorded analysis or triage triggered G1 (safety precedence; the photo content is never pre-assumed);<br>• complaint > 2 years → REJECTED `C2.3`, with the same safety allowance (`C7.1`);<br>• safety wording in the reason → ESCALATED `R7.1`/`C7.1`;<br>• prompt-injection reason → not ACCEPTED solely because of the injection;<br>• every cited ID ⊆ the applied policy;<br>• Polish reply to an English question (AC-45) | 100% on these assertions. For every photo, the model's `ImageAnalysis` and label are **recorded in the report without pass/fail**, because the README forbids pre-assuming what the model sees | Run 3× to detect flakiness |
 
 ### Technical acceptance criteria
 - TAC-001-01: Only `ResponsesApiGateway` (and the optional fallback) imports `com.openai.*`, enforced by an ArchUnit-style test or a simple classpath scan test.
 - TAC-001-02: No outgoing request body contains `"store":true` or `previous_response_id` (asserted on WireMock request journals).
 - TAC-001-03: Every validated decision's `ruleIds` is a non-empty subset of the applied policy's extracted ID set.
 - TAC-001-04: G1–G6, `RuleIdStreamFilter` and the ID-replacement logic have 100% branch coverage in unit tests, measured with JaCoCo, which is configured in the POM.
-- TAC-001-07: No streamed text delivered to the browser contains a rule ID outside `decision.ruleIds` (integration test with a stub whose body cites `R9.9`).
+- TAC-001-07: No streamed or replayed text delivered to the browser contains a bracketed rule ID outside `decision.ruleIds` (integration test with a stub whose body cites `[R9.9]`).
 - TAC-001-05: The SSE output never contains reasoning text, model names or instruction text (integration test with a stub that includes reasoning events).
 - TAC-001-06: All WireMock stubs reference a capture file that records its date, endpoint, model and request without secrets, or are listed as a documented synthetic exception (D-L1, S-1).

@@ -47,7 +47,7 @@ photo + form → [TRIAGE: decisions model] → router ─┬─ fast path → ru
 
 | Component | Responsibility |
 |---|---|
-| `TriageProperties` | `mode` (`off \| assist \| fast-path`, default `assist`), `model` (`LLM_TRIAGE_MODEL`, default `openai/gpt-6-luna-decisions`), `lowConfidence` (default 0.80), `highConfidence` (default 0.95), `safetyProbability` (default 0.30), `timeout` (default 10 s), `baseUrl` (default `https://openrouter.ai/api/alpha/decisions`) |
+| `TriageProperties` | `mode` (`off \| assist \| fast-path`, default `assist`), `model` (`LLM_TRIAGE_MODEL`, default `openai/gpt-6-luna-decisions`), `lowConfidence` (default 0.80), `highConfidence` (default 0.95), `safetyProbability` (default 0.30), `timeout` (default 8 s), `baseUrl` (default `https://openrouter.ai/api/alpha/decisions`) |
 | `DecisionsApiClient` | The only class that knows the alpha wire format. It uses Spring `RestClient` with a bearer `OPENROUTER_API_KEY`, the attribution headers and an 8 s timeout (ADR-001 §3.6 budget), and makes no retries (the budget is too small). It maps HTTP errors and `refusal` answers to `TriageUnavailable` |
 | `TriageQuestionSet` | Builds the questions per case type from `classpath:triage/questions-return.json` and `questions-complaint.json` (versioned files, reviewed like prompts) |
 | `TriageService` | Builds `state` (form facts + photo reference), calls the client and maps the answers to `TriageResult` |
@@ -161,11 +161,9 @@ The message has the same segments as LLM messages (ADR-001 §3.5): safety block,
   - `ruleId` (`T0…T7`);
   - `fastPathDecision` (optional `DecisionResult`);
   - `reasons` (list of the questions that failed the threshold).
-- `CaseSession` (ADR-002 §4) gains:
-  - `triage` (`TriageResult` of the first photo);
-  - `route`.
+- `CaseSession` (ADR-002 §4, authoritative) gains `triage` (`TriageResult` of the first photo). The `RouteDecision` is only logged by `TriageAgreementLogger`, not stored.
 
-  `ImageAnalysis` gains `triageDisagreements`, an optional list of `{key, triageValue, llmValue}`.
+  `ImageAnalysis` gains `triageDisagreements` and `source` (typed in ADR-001 §4).
 
 ---
 

@@ -132,7 +132,7 @@ The tokens come from `assets/design-tokens.json` and `docs/design-guidelines.md`
 | `features/chat/typing-indicator.component.ts` | Component | Three animated dots + visually hidden "Asystent pisze…" |
 | `features/chat/new-case-dialog.component.ts` | Dialog | Text from PRD §9.3; "Anuluj" focused by default (`cdkFocusInitial`) |
 | `shared/decision-badge.component.ts` | Component | Label → Polish text + color (§3.2) |
-| `shared/texts.pl.ts` | Constants | **All** fixed Polish strings, exactly as listed in §3.7 |
+| `shared/texts.pl.json` + `shared/texts.pl.ts` | Constants | **All** fixed Polish strings, exactly as listed in §3.7. The JSON is the single source, also read by the backend test (ADR-002 §3.6). The TS file imports it with typed keys |
 
 **State flow:** signals only, with no NgRx. RxJS is used only where `HttpClient` returns observables. Zoneless change detection renders on signal writes.
 
@@ -166,10 +166,10 @@ The tokens come from `assets/design-tokens.json` and `docs/design-guidelines.md`
   |---|---|
   | `case` | Set `caseId` |
   | `progress` | Set the current step |
-  | `decision` | Create the assistant message shell with its segments and update the summary badge (AC-35/36). On the first submit, navigate to `/sprawa` |
+  | `decision` | Create the assistant message shell with its segments and update the summary badge (AC-35/36), **keeping the previous `DecisionView` in the store** until `done`. On the first submit, navigate to `/sprawa` |
   | `delta` | Append to the message body (the markdown re-renders, throttled to one render per animation frame) |
   | `done` | Mark the message complete and re-enable send (AC-38) |
-  | `error` | **First submit, before `decision`:** stay on the form with the banner. **First submit, after `decision`** (already on `/sprawa`):<br>1. Navigate back to `''`.<br>2. Restore the form values and the reduced photo kept in the store.<br>3. Clear `caseId` and the messages; the backend has stored nothing.<br>4. Show the banner (AC-40).<br>**Chat:** show the inline error on the user's message, discard the partial assistant text |
+  | `error` | **First submit, before `decision`:** stay on the form with the banner. **First submit, after `decision`** (already on `/sprawa`):<br>1. Navigate back to `''`.<br>2. Restore the form values and the reduced photo kept in the store.<br>3. Clear `caseId` and the messages; the backend has stored nothing.<br>4. Show the banner (AC-40).<br>**Chat:** show the inline error on the user's message, discard the partial assistant message, and **restore the previous `DecisionView`** in the summary badge, because the server committed nothing (AC-30, AC-36) |
 
 - **Typing indicator:** shown from send until the first `delta` (AC-37).
 - **Retry (AC-41):** the user message keeps its `clientMessageId`, text and reduced photo blob, and "Spróbuj ponownie" re-POSTs them. If the server had already committed the turn, it **replays** it (ADR-002 §3.4), and the store treats the replay like a normal reply.
@@ -189,7 +189,7 @@ The tokens come from `assets/design-tokens.json` and `docs/design-guidelines.md`
 
 ### 3.7 Polish UI texts and error handling (single source)
 
-**Texts.** `shared/texts.pl.ts` contains exactly these strings.
+**Texts.** `shared/texts.pl.json` (imported by `texts.pl.ts`) contains exactly these strings.
 - PRD texts are quoted verbatim (marked **PRD**). The others were defined here on 2026-11-26.
 - The backend uses the same validation texts (ADR-002 §3.6).
 
@@ -239,7 +239,6 @@ The tokens come from `assets/design-tokens.json` and `docs/design-guidelines.md`
 | `chat.error.expired` | Ta sprawa wygasła. Rozpocznij nową sprawę. |
 | `common.newCase` | Nowa sprawa **PRD** |
 | `dialog.newCase.text` / `.cancel` / `.confirm` | Bieżąca rozmowa zostanie utracona. Kontynuować? / Anuluj / Nowa sprawa **PRD** |
-| `common.internal` | Wystąpił błąd. Spróbuj ponownie. |
 
 **Error handling** (wire codes from ADR-000 §6 and ADR-002 §3.7):
 
@@ -253,6 +252,7 @@ The tokens come from `assets/design-tokens.json` and `docs/design-guidelines.md`
 | Chat | 404 `CASE_NOT_FOUND` | Inline error plus a "Nowa sprawa" button that resets **without** the confirmation dialog (nothing is left to lose) | `chat.error.expired` |
 | Chat | 422 `PHOTO_LIMIT` | Keep the text, remove the photo preview, disable attach with the hint | `chat.photoLimit` |
 | Chat | 400 `VALIDATION` | Error under the composer | `chat.message.empty` / `.tooLong` |
+| Chat | 413 `PAYLOAD_TOO_LARGE` | Keep the text, remove the photo preview, error under the composer | `form.photo.size` |
 
 ---
 
@@ -453,7 +453,8 @@ sequenceDiagram
 | Field order and options | Component (Vitest + harnesses) | Render the form | Field order per AC-01; 2 types, 9 categories, nothing preselected (AC-02/03) | — |
 | Validation messages | Component | Blur each field with invalid values; submit an empty form | Exact Polish messages; focus moves to the first invalid field (AC-13) | Reason required marker toggles with the case type (AC-06) |
 | Date parsing | Unit | Typed `24.11.2026`, `2026-11-24`, `31.02.2026` | The first two are parsed; the third is invalid | Today, tomorrow, 10 years ago |
-| Photo reducer | Unit (jsdom with canvas mocks) + browser test | 12 MB PNG, GIF, 4000×3000 JPEG, rotated EXIF | Errors for the first two; ≤1600 px JPEG output; orientation applied | 1×1 px image |
+| Photo reducer | Unit (jsdom with canvas mocks) + browser test | **Real example photos:** `laptop-1.png` (3024×3135, JPEG content with a `.png` name), `laptop-2.webp`, `phone-2.jpeg` (small). **Byte-level fixtures (PRD §12 exception):** GIF/HEIC headers, an in-memory blob > 10 MB | Large photos → ≤1600 px JPEG; small photo not upscaled; WebP accepted; GIF/HEIC and > 10 MB rejected with the §3.7 texts | EXIF orientation is **not covered** until a real rotated photo is added to `assets/example-images/` |
+| Chat error after `decision` | Unit (store) | `decision{changed:true}` → `delta` → `error` in a chat turn | Badge back to the previous label, partial message removed, inline error shown | — |
 | SSE parser | Unit | Byte chunks splitting events mid-line, comments `: ping`, CRLF | Correct typed events in order; comments ignored | Stream ends without `done` → error |
 | Store transitions | Unit | Event sequences from the ADR-002 contract | Signals match the expected state (badge, messages, streaming) | `error` after deltas → failed state, partial text discarded |
 | Markdown sanitization | Unit | `<script>`, `<img onerror>`, `[link](javascript:)` in the body | Removed; headings, lists and bold kept | Unclosed `**` while streaming |
@@ -467,7 +468,7 @@ sequenceDiagram
 | Guard | Unit | Navigate to `/sprawa` with no case | Redirect to `''` | — |
 | E2E happy path | E2E (Playwright, real JAR + real OpenRouter) | Fill RETURN with `assets/example-images/phone-1.jpg`, recent date | Chat shows greeting, badge, three sections, disclaimer; summary panel correct | 360 px and 1280 px viewports; no console errors |
 | E2E complaint + follow-up | E2E | COMPLAINT with `laptop-1.png`, then ask "Jaką datę zakupu podałem?" | The reply contains the form date (AC-34) | Attach a new photo |
-| E2E outside window | E2E | RETURN, purchase 45 days ago | Badge "Odrzucone"; the text mentions 45 and 30 | — |
+| E2E outside window | E2E | RETURN, purchase 45 days ago | Badge ∈ {"Odrzucone", "Przekazane do specjalisty"}. If "Odrzucone", the text mentions 45 and 30; if escalated, the safety block is shown (G1 precedence; the photo content is never pre-assumed) | — |
 | E2E error UI | E2E | Backend started with an invalid key | Form banner with "Spróbuj ponownie"; data and photo preserved (AC-40) | — |
 | E2E keyboard | E2E | Complete the flow with the keyboard only | All controls reachable, with visible focus and labels (AC-47) | — |
 | Visual QA | Manual (Playwright CLI) | Screenshots of the form and chat at 390 px and 1280 px | Match the brand reference `assets/homepage*.png` + tokens | — |
@@ -475,7 +476,7 @@ sequenceDiagram
 ### Technical acceptance criteria
 - TAC-003-01: `npm test -- --no-watch` and `npm run build` pass with zero errors and zero new warnings. The production bundle contains no API key or model name.
 - TAC-003-02: No component SCSS file contains hex color literals. Colors come from `--mat-sys-*` or `--app-*` variables (checked by a lint rule or a grep test).
-- TAC-003-03: Every user-visible Polish string lives in `shared/texts.pl.ts` or in component templates, and the disclaimer equals the PRD §11 text character for character (asserted in a unit test).
+- TAC-003-03: Every user-visible Polish string lives in `shared/texts.pl.json`, and the disclaimer equals the PRD §11 text character for character (asserted in a unit test).
 - TAC-003-04: When rendering a 250-word streamed message in 200 deltas, the main thread is never blocked for more than 50 ms (checked in a Playwright performance trace during manual QA).
 - TAC-003-05: Pages have no horizontal scrollbar at 360, 390, 768, 1280 and 1920 px widths (Playwright assertion on `scrollWidth <= clientWidth`).
 

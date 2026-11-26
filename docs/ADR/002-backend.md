@@ -96,7 +96,7 @@ Dependencies added by hand to the generated POM (versions pinned in `<properties
 |---|---|---|
 | `maven-surefire-plugin` (Boot-managed) | Runs `*Test` classes. `<excludedGroups>${test.excludedGroups}</excludedGroups>`, with the property defaulting to `capture,eval` | Unit tests. The tagged real-API tests are excluded by default, and the exclusion can be cleared from the command line |
 | `maven-failsafe-plugin` (Boot-managed, **must be declared** in `<build><plugins>` with the `integration-test` and `verify` goals) | Runs `*IT` classes, with the same `excludedGroups` property | Without this declaration, `*IT` classes are silently never run, and a run with zero tests looks green |
-| `jacoco-maven-plugin` | `prepare-agent` + `report`; coverage check on the `decision` package (TAC-001-04) | Branch-coverage requirement |
+| `jacoco-maven-plugin` | `prepare-agent` + `report`; a `check` with 100% branch coverage limited to the classes `com.hsdc.copilot.decision.Guardrails*`, `RuleIdValidator*` and `RuleIdStreamFilter*` (TAC-001-04). No package-wide rule | Branch-coverage requirement, without blocking `DecisionService` |
 | `frontend-maven-plugin`, `maven-resources-plugin` | §3.8 | Angular build and policies |
 
 **Commands:**
@@ -119,7 +119,7 @@ Boot 4 points the implementing agent must respect (from the 4.0 migration guide 
 | Package | Main types | Responsibility |
 |---|---|---|
 | `web` | `CaseController`, `MessageController`, `SseEventWriter`, `ApiExceptionHandler`, `SpaForwardingConfig` | HTTP mapping, request validation, SSE emission, error bodies, SPA fallback |
-| `cases` | `CaseService`, `CaseStore`, `CaseSession`, `CaseForm`, `ChatMessage`, `TurnInput`, `PhotoValidator` | Lifecycle, per-case locking, turn orchestration, commit/rollback of a turn |
+| `cases` | `CaseService`, `CaseStore` (interface: `find`, `save`, `remove`), `CaffeineCaseStore` (implementation), `CaseSession` (holds its own `ReentrantLock` and a `deleted` flag), `CaseForm`, `ChatMessage`, `TurnInput`, `PhotoValidator` | Lifecycle, per-case locking, turn orchestration, commit/rollback of a turn |
 | `analysis`, `decision`, `llm`, `prompts`, `policy` | see ADR-001 | AI pipeline |
 | `triage` | `DecisionsApiClient` (Spring `RestClient`), `TriageService`, `TriageRouter`, `FastPathRuleTable`, `FastPathMessageRenderer` | Decisions-model triage and fast path (ADR-004) |
 | `config` | `AppProperties`, `OpenRouterProperties`, `ClockConfig`, `ExecutorConfig`, `CaseStoreConfig`, `OpenAiClientConfig` | Typed `@ConfigurationProperties` (validated), beans |
@@ -128,6 +128,13 @@ Boot 4 points the implementing agent must respect (from the 4.0 migration guide 
 
 `CaseService.runTurn` handles both the first decision and chat turns:
 
+0. **Pre-stream check order for `POST /messages`:**
+   1. Multipart parsing: 413 if a part is too large. This happens at the servlet level, before the controller.
+   2. Unknown or expired case: 404.
+   3. `clientMessageId` already committed: **replay** (below). No other check applies, so a retried third-photo turn replays instead of getting 422.
+   4. Turn running: 409 `CASE_BUSY`.
+   5. Validation: 400.
+   6. Photo limit: 422.
 1. Acquire the case's `ReentrantLock` with `tryLock()`. If it is busy, return **409** so that two concurrent turns cannot interleave history.
 2. Build a **working copy** of the turn: user message, new analysis and incremented photo counter.
 3. Run the pipeline (ADR-001) and emit `progress`, then `decision`, then `delta` events.
@@ -174,18 +181,28 @@ Boot 4 points the implementing agent must respect (from the 4.0 migration guide 
 
 ### 3.6 Request validation
 
-Server validation mirrors the client rules (the client is never trusted). It uses Jakarta Bean Validation on `CaseForm` plus custom validators. The message texts are in Polish and identical to the PRD texts. Where the PRD gives no text, the texts come from the single string table in **ADR-003 §3.7**, keyed by the codes below. The backend keeps them in `ValidationMessages_pl.properties`, and a unit test checks that they match the frontend table.
+Server validation mirrors the client rules (the client is never trusted). It uses Jakarta Bean Validation on `CaseForm` plus custom validators. **Texts.**
+- The message texts are Polish and use **the same keys and texts** as the single string table in **ADR-003 §3.7**, where PRD texts are verbatim.
+- **Single source:** `app/frontend/src/app/shared/texts.pl.json`. The frontend's `texts.pl.ts` imports it.
+- The backend's `ValidationMessages_pl.properties` holds the backend subset under the same keys.
+- A backend unit test (plan T20) reads `../frontend/src/app/shared/texts.pl.json`, relative to `app/backend`, and asserts that every backend key exists there with an identical text.
+- **Backend key set:**
+  - `form.caseType.required`, `form.category.required`, `form.model.invalid`;
+  - `form.purchaseDate.required`, `form.purchaseDate.invalid`, `form.purchaseDate.future`, `form.purchaseDate.tooOld`;
+  - `form.reason.tooShort`, `form.reason.tooLong`;
+  - `form.photo.required`, `form.photo.type`, `form.photo.size`;
+  - `chat.message.empty`, `chat.message.tooLong`, `chat.photoLimit`.
 
-| Field | Rule | Error code / message |
+| Field | Rule | Key(s) |
 |---|---|---|
-| `caseType` | Required; `RETURN` or `COMPLAINT` | `caseType.required` |
-| `category` | Required; one of the 9 enum values (AC-03): `SMARTPHONE, LAPTOP, TABLET, DESKTOP, MONITOR, TV, AUDIO, WEARABLE, OTHER` | `category.required` |
-| `model` | Trimmed, 2–100 chars | "Podaj nazwę lub model urządzenia (2–100 znaków)" |
-| `purchaseDate` | ISO date; ≤ today; ≥ today − 10 years | "Data zakupu nie może być w przyszłości" / "Data zakupu jest zbyt odległa" |
-| `reason` | ≤ 2000 chars; for `COMPLAINT` ≥ 20 chars after trimming | "Opisz problem (min. 20 znaków)" |
-| `photo` | Required; ≤ 10 MB; magic bytes JPEG (`FF D8 FF`), PNG (`89 50 4E 47`) or WebP (`RIFF….WEBP`) | "Dozwolone formaty: JPG, PNG, WebP" / "Zdjęcie przekracza limit 10 MB" |
-| chat `text` | 0–2000 chars; must be 1–2000 non-whitespace chars when no photo is attached | `message.empty` |
-| chat `photo` | Same as above; rejected with 422 if `additionalPhotoCount == 3` | "Osiągnięto limit zdjęć w tej sprawie" |
+| `caseType` | Required; `RETURN` or `COMPLAINT` | `form.caseType.required` |
+| `category` | Required; one of the 9 enum values (AC-03): `SMARTPHONE, LAPTOP, TABLET, DESKTOP, MONITOR, TV, AUDIO, WEARABLE, OTHER` | `form.category.required` |
+| `model` | Trimmed, 2–100 chars | `form.model.invalid` |
+| `purchaseDate` | Required; ISO date; ≤ today; ≥ today − 10 years | `form.purchaseDate.required` / `.invalid` / `.future` / `.tooOld` |
+| `reason` | ≤ 2000 chars; for `COMPLAINT` ≥ 20 chars after trimming | `form.reason.tooLong` / `form.reason.tooShort` |
+| `photo` | Required; ≤ 10 MB; magic bytes JPEG (`FF D8 FF`), PNG (`89 50 4E 47`) or WebP (`RIFF….WEBP`) | `form.photo.required` / `form.photo.type` / `form.photo.size` |
+| chat `text` | 0–2000 chars; must be 1–2000 non-whitespace chars when no photo is attached | `chat.message.empty` / `chat.message.tooLong` |
+| chat `photo` | Same as above; rejected with 422 if `additionalPhotoCount == 3` | `chat.photoLimit` |
 
 Multipart limits: `spring.servlet.multipart.max-file-size=10MB` and `max-request-size=11MB`. `MaxUploadSizeExceededException` maps to **413** with the size message.
 
@@ -238,8 +255,9 @@ The Angular output folder `dist/<project>/browser` is the `@angular/build:applic
 
 | Key | Value / source |
 |---|---|
-| `spring.config.import` | `optional:file:.env[.properties],optional:file:../../.env[.properties]`, which loads the single repository-root `.env` whether the app starts from the root (`java -jar`) or from `app/backend` (`./mvnw`). See ADR-000 §7 |
-| `spring.profiles` (tests) | Integration tests run with `@ActiveProfiles("test")`, which uses `src/test/resources/application-test.yml`: dummy `openrouter.api-key`, `LLM_MODEL` values, `triage.mode=assist`, and **both** `openrouter.base-url` and `triage.base-url` pointing at WireMock. Tests never read `.env` |
+| `spring.config.import` | `optional:file:.env[.properties],optional:file:../../.env[.properties]`. It is declared in a **second YAML document** of `application.yml` with `spring.config.activate.on-profile: "!test"`, so it loads the single repository-root `.env` when the app starts from the root (`java -jar`) or from `app/backend` (`./mvnw spring-boot:run`, and the `real-api` tests), but **never under profile `test`**. T10 verifies this with a test that fails if a `.env` value is visible under `test`. Process environment variables override `.env` values (e.g. `OPENROUTER_API_KEY=invalid` for the E2E error-banner instance). See ADR-000 §7 |
+| Profile `test` | Unit tests that need Spring and all `*IT` classes use `@ActiveProfiles("test")` → `src/test/resources/application-test.yml`: dummy `openrouter.api-key`, `LLM_MODEL` values, `triage.mode=assist`, and **both** `openrouter.base-url` (with `/api/v1`) and `triage.base-url` pointing at WireMock. The generated `CopilotApplicationTests` becomes `ApplicationContextIT` with this profile |
+| Profile `real-api` | Used **only** by tests tagged `capture` or `eval`, which ORCH runs deliberately. They use `src/test/resources/application-real-api.yml` (real base URLs; no key in the file). The key comes from the root `.env` import or the process environment |
 | `spring.threads.virtual.enabled` | `true` |
 | `spring.mvc.async.request-timeout` | `125s` |
 | `spring.servlet.multipart.max-file-size` / `max-request-size` | `10MB` / `11MB` |
@@ -252,7 +270,7 @@ The Angular output folder `dist/<project>/browser` is the `@angular/build:applic
 | `openrouter.base-url` | `${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}` |
 | `openrouter.vision-model` / `decision-model` | `${LLM_VISION_MODEL:${LLM_MODEL}}` / `${LLM_DECISION_MODEL:${LLM_MODEL}}` |
 | `openrouter.decision-reasoning-effort` | `${LLM_DECISION_REASONING_EFFORT:medium}` |
-| `triage.mode` / `model` / `low-confidence` / `high-confidence` / `safety-probability` / `base-url` / `timeout` | `${TRIAGE_MODE:assist}` / `${LLM_TRIAGE_MODEL:openai/gpt-6-luna-decisions}` / `${TRIAGE_LOW_CONFIDENCE:0.80}` / `${TRIAGE_HIGH_CONFIDENCE:0.95}` / `${TRIAGE_SAFETY_PROBABILITY:0.30}` / `${OPENROUTER_DECISIONS_URL:https://openrouter.ai/api/alpha/decisions}` / `10s` |
+| `triage.mode` / `model` / `low-confidence` / `high-confidence` / `safety-probability` / `base-url` / `timeout` | `${TRIAGE_MODE:assist}` / `${LLM_TRIAGE_MODEL:openai/gpt-6-luna-decisions}` / `${TRIAGE_LOW_CONFIDENCE:0.80}` / `${TRIAGE_HIGH_CONFIDENCE:0.95}` / `${TRIAGE_SAFETY_PROBABILITY:0.30}` / `${OPENROUTER_DECISIONS_URL:https://openrouter.ai/api/alpha/decisions}` / `8s` (ADR-001 §3.6) |
 | `openrouter.app-title` / `app-url` | `${OPENROUTER_APP_TITLE:Hardware Service Decision Copilot PoC}` / `${OPENROUTER_APP_URL:http://localhost:8080}` |
 
 ---
@@ -262,7 +280,7 @@ The Angular output folder `dist/<project>/browser` is the `@angular/build:applic
 | Type | Fields | Notes |
 |---|---|---|
 | `CaseForm` (request part `form`, JSON) | `caseType`, `category`, `model`, `purchaseDate` (`YYYY-MM-DD`), `reason` | §3.6 |
-| `CaseSession` | `caseId`, `form`, `triage` (optional `TriageResult`, ADR-004), `analyses`, `messages`, `currentDecision`, `additionalPhotoCount`, `committedClientMessageIds`, `lock`, `createdAt` | Mutable; accessed only under `lock` |
+| `CaseSession` | `caseId`, `form`, `triage` (optional `TriageResult`, ADR-004), `analyses`, `messages`, `currentDecision`, `additionalPhotoCount`, `committedClientMessageIds`, `lock` (`ReentrantLock`), `deleted` (boolean, set by DELETE), `createdAt` | Mutable; accessed only under `lock` |
 | `ChatMessage` | `id`, `role`, `text`, `clientMessageId` (user only), `hasPhoto`, `analysisIndex`, `decisionSnapshot`, `changed`, `previousLabel`, `createdAt` | — |
 | `TurnInput` | `text`, `photoJpeg` (bytes or null), `clientMessageId` | Photo bytes live only for the duration of the turn |
 | `ApiError` | `code` (`VALIDATION \| CASE_NOT_FOUND \| CASE_BUSY \| PHOTO_LIMIT \| PAYLOAD_TOO_LARGE \| INTERNAL`), `message?`, `fieldErrors?` (`[{field, message}]`, with messages equal to the texts in ADR-003 §3.7) | §3.7. The frontend maps each code to UI behavior (ADR-003 §3.7) |
@@ -287,7 +305,9 @@ The Angular output folder `dist/<project>/browser` is the `@angular/build:applic
 - **In-stream errors:** `error`, after which nothing is committed.
 
 ### `DELETE /api/cases/{caseId}`
-- Returns 204 always. It removes the case from the store and cancels a running turn.
+- Returns 204 always.
+- It sets `CaseSession.deleted=true`, removes the case from the store and cancels a running turn.
+- The commit step checks `deleted` and skips the re-`put`, so a turn finishing after DELETE cannot resurrect the case.
 
 ### `GET /actuator/health`
 - Returns 200 `{"status":"UP"}`.
@@ -461,7 +481,7 @@ sequenceDiagram
 | Scenario | Type | Input | Expected output | Edge cases |
 |---|---|---|---|---|
 | Form validation | Unit | Each invalid field per §3.6 | 400 with field + Polish message | Model of 1/2/100/101 chars; reason of 19/20 chars for a complaint; date = today, tomorrow, today − 10y, today − 10y − 1d |
-| Photo magic bytes | Unit | JPEG/PNG/WebP/GIF/HEIC/renamed `.txt` | Accept the first three; reject the others | 0-byte file; exactly 10 MB; 10 MB + 1 B → 413 |
+| Photo magic bytes | Unit | **Real example photos** for JPEG/WebP (incl. `laptop-1.png`, which is JPEG content with a `.png` name → accepted by content). **Byte-level fixtures under the PRD §12 exception:** PNG/GIF/HEIC headers, a renamed text file, an empty file | Accept JPEG/PNG/WebP by content; reject the others | In-memory content of exactly 10 MB and 10 MB + 1 B (exception) → accepted / rejected; the 413 path is covered in an IT with a multipart limit lowered by a test property |
 | Case store TTL | Unit | Fake ticker in Caffeine | Evicted after 60 min idle, kept on access | 501st case evicts the LRU |
 | Atomic commit | Unit | Pipeline fails at the decision or mid-stream | No change to `messages`, `analyses` or `photoCount` | Failure after 50 deltas |
 | Lock | Unit/integration | Two concurrent POSTs for the same case | One streams; the other gets 409 `CASE_BUSY` | Lock released after an error |
@@ -485,7 +505,7 @@ sequenceDiagram
 - TAC-002-01: `./mvnw -v` and `java -version` report Java 25. The POM declares `java.version=25` and Boot `4.2.0`.
 - TAC-002-02: The POM contains no `spring-boot-starter-web` (deprecated) and no Jackson 2 `com.fasterxml.jackson.core:jackson-databind` dependency.
 - TAC-002-03: `./mvnw -Pno-frontend test` runs backend tests without Node. `./mvnw package` produces a JAR containing `static/index.html` and `policies/*.md`.
-- TAC-002-04: For every streaming response, the event sequence matches the regular expression `case? progress+ (error | decision progress? delta* (done|error))` (asserted in integration tests). A replay matches `decision delta done`.
+- TAC-002-04: For every streaming response, the event sequence matches the regular expression `case? progress+ (error | decision progress delta* (done|error))` (asserted in integration tests). A replay matches `decision delta done`.
 - TAC-002-05: After any `error` event, or a client disconnect **before the commit**, the case state equals its state before the request (asserted by snapshot comparison). A disconnect after the commit leaves the committed turn in place.
 - TAC-002-07: Surefire and Failsafe each report a **non-zero** number of executed tests, and the `capture`/`eval` tags are not executed by `./mvnw verify` without overrides.
 - TAC-002-06: No response header or body exposes the server or framework version, a stack trace or the API key.
