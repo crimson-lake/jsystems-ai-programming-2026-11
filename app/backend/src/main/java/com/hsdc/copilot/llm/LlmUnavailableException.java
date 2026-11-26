@@ -1,0 +1,13 @@
+package com.hsdc.copilot.llm;
+
+/** Domain exception of the model gateway (Unavailable). */
+public class LlmUnavailableException extends RuntimeException {
+
+    public LlmUnavailableException(String message) {
+        super(message);
+    }
+
+    public LlmUnavailableException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}

@@ -13,7 +13,7 @@ Screenshots from per-task QA and phase gates (plan §4.5). Each entry gives the 
 
 ## T11 — Frontend scaffold (2026-11-26)
 
-- **App commit:** T11 commit (placeholder app, no backend involved).
+- **App commit:** `46fce74` (placeholder app, no backend involved).
 
 | File | Step | Result |
 |---|---|---|
