@@ -18,3 +18,17 @@ Screenshots from per-task QA and phase gates (plan §4.5). Each entry gives the 
 | File | Step | Result |
 |---|---|---|
 | `T11/01-placeholder-1280.png` | `npm start`, open `:4200` at 1280 px | Placeholder heading renders in Montserrat; console has 0 errors |
+
+## Q1 — Phase 1 gate (2026-11-26)
+
+- **App commit:** `3937b25` + the DevTools fix committed with this gate.
+- **Stack:** `./mvnw -Pno-frontend spring-boot:run` with the real root `.env`, and `npm start` (proxy `/api` → `:8080`).
+- **Captures reviewed:** S-1 7/7 recorded; S-2 failed (upstream 401), triage off (F1). See `app/backend/src/test/resources/openrouter-captures/README.md`.
+
+| File | Step | Result |
+|---|---|---|
+| `Q1/01-health-1280.png` | Open `:8080/actuator/health` | `{"status":"UP"}` |
+| `Q1/02-placeholder-1280.png` | Open `:4200` at 1280 px | Placeholder renders; `h1` font-family is Montserrat |
+| `Q1/03-placeholder-390.png` | Same at 390 px | No horizontal scroll, heading wraps |
+| — | `run-code`: `GET :4200/api/does-not-exist` | **Defect found and fixed:** the first run returned a JSON 404 **with a stack trace**, because DevTools forces `include-stacktrace=always`. With `spring.devtools.add-properties=false` the body is `{"timestamp","status":404,"error":"Not Found","path"}`, which proves the proxy reaches the backend without leaking internals (AC-42) |
+| — | Console | 0 errors, 0 warnings |

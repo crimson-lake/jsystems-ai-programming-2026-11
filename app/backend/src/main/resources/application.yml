@@ -1,6 +1,9 @@
 spring:
   application:
     name: copilot
+  devtools:
+    # DevTools would otherwise force server.error.include-stacktrace=always in dev (AC-42)
+    add-properties: false
   threads:
     virtual:
       enabled: true
