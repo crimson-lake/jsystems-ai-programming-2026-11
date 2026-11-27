@@ -71,9 +71,13 @@ jobs:
           set -euo pipefail
           claude -p "Reply with exactly: CLAUDE_HEADLESS_OK" \
             --restricted --strict-mcp-config --tools "" --permission-mode dontAsk \
-            --max-turns 1 --model "$CLAUDE_MODEL" --output-format json < /dev/null > "$RUNNER_TEMP/smoke.json"
-          jq '{is_error, result, num_turns, total_cost_usd}' "$RUNNER_TEMP/smoke.json"
-          [[ "$(jq -r .result "$RUNNER_TEMP/smoke.json")" == *CLAUDE_HEADLESS_OK* ]] || { echo '::error::Claude smoke test failed'; exit 1; }
+            --max-turns 1 --model "$CLAUDE_MODEL" --output-format json < /dev/null > "$RUNNER_TEMP/smoke.json" || true
+          # On failure claude exits 1 and the reason (e.g. 401 invalid token) is only in the JSON result.
+          jq '{is_error, terminal_reason, result, num_turns, total_cost_usd}' "$RUNNER_TEMP/smoke.json" || cat "$RUNNER_TEMP/smoke.json"
+          if [[ "$(jq -r .result "$RUNNER_TEMP/smoke.json" 2>/dev/null)" != *CLAUDE_HEADLESS_OK* ]]; then
+            echo "::error::Claude smoke test failed: $(jq -r '.result // "no JSON output"' "$RUNNER_TEMP/smoke.json" 2>/dev/null | head -c 300)"
+            exit 1
+          fi
           echo "### Claude headless smoke test: OK (model \`$CLAUDE_MODEL\`, CLI $CLAUDE_CODE_VERSION)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Review PR diff
@@ -108,9 +112,12 @@ jobs:
           claude -p "$prompt" \
             --restricted --strict-mcp-config --tools "Read,Grep,Glob" --permission-mode dontAsk \
             --max-turns 15 --model "$CLAUDE_MODEL" --output-format json \
-            < "$RUNNER_TEMP/pr.diff" > "$RUNNER_TEMP/review.json"
-          jq '{is_error, num_turns, total_cost_usd}' "$RUNNER_TEMP/review.json"
-          [[ "$(jq -r .is_error "$RUNNER_TEMP/review.json")" == false ]] || { echo '::error::Claude review failed'; exit 1; }
+            < "$RUNNER_TEMP/pr.diff" > "$RUNNER_TEMP/review.json" || true
+          jq '{is_error, terminal_reason, num_turns, total_cost_usd}' "$RUNNER_TEMP/review.json" || cat "$RUNNER_TEMP/review.json"
+          if [[ "$(jq -r .is_error "$RUNNER_TEMP/review.json" 2>/dev/null)" != false ]]; then
+            echo "::error::Claude review failed: $(jq -r '.result // "no JSON output"' "$RUNNER_TEMP/review.json" 2>/dev/null | head -c 300)"
+            exit 1
+          fi
           jq -r '.result // empty' "$RUNNER_TEMP/review.json" > "$RUNNER_TEMP/review.md"
           [[ -s "$RUNNER_TEMP/review.md" ]] || printf '## Summary\n\nClaude returned an empty review.\n' > "$RUNNER_TEMP/review.md"
           cat "$RUNNER_TEMP/review.md" >> "$GITHUB_STEP_SUMMARY"
