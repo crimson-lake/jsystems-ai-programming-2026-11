@@ -39,3 +39,7 @@ ffmpeg -f concat -safe 0 -i list.txt -c copy -movflags +faststart docs/demo/poc-
 ```
 
 The plan's single-pass command (`-crf 28`, `scale='min(1280,iw)':-2`) was not used because the output was only about 6 MB and `-crf 22` keeps small text legible.
+
+## Orchestrator review (2026-11-27)
+
+The whole video was reviewed as contact sheets with one frame every 10 s (23 frames over 3:50). Every chapter shows the real flow: validation errors on an empty form; a RETURN decision ("Odrzucone") and the reply "Podałeś datę zakupu: 18 listopada 2026 r."; a COMPLAINT with `laptop-1.png` ("Przekazane do specjalisty"); a chat photo turn that keeps the decision; the 45-day return ("45 dni … 30 dni", "Odrzucone"); the safety case with the red safety block first; the error banner with "Spróbuj ponownie"; "Nowa sprawa"; and the 390 px mobile form and chat. The human lead still watches it in full as the final acceptance (plan T45).
