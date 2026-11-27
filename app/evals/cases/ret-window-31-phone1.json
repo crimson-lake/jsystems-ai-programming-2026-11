@@ -1,0 +1,13 @@
+{
+  "id": "ret-window-31-phone1",
+  "description": "Return on day 31: outside the window",
+  "caseType": "RETURN",
+  "category": "SMARTPHONE",
+  "model": "Galaxy S23",
+  "purchaseDaysAgo": 31,
+  "reason": "Chcę zwrócić to urządzenie, nie spełnia moich oczekiwań.",
+  "photo": "phone-1.jpg",
+  "expect": {
+    "windowRejectOrSafety": true
+  }
+}

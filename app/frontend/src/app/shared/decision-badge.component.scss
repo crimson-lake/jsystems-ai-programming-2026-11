@@ -1,0 +1,32 @@
+:host {
+  display: inline-block;
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font: var(--mat-sys-label-large);
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.badge--accepted {
+  background: var(--app-badge-accepted-bg);
+  color: var(--app-badge-accepted-fg);
+}
+
+.badge--rejected {
+  background: var(--app-badge-rejected-bg);
+  color: var(--app-badge-rejected-fg);
+}
+
+.badge--needs-info {
+  background: var(--app-badge-needs-info-bg);
+  color: var(--app-badge-needs-info-fg);
+}
+
+.badge--escalated {
+  background: var(--app-badge-escalated-bg);
+  color: var(--app-badge-escalated-fg);
+}

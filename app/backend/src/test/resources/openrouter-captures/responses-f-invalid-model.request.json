@@ -1,0 +1,1 @@
+{"input":[{"content":"Cześć","role":"user","type":"message"}],"instructions":"Odpowiadaj krótko.","model":"openai/this-model-does-not-exist-capture-f","reasoning":{"effort":"low"}}

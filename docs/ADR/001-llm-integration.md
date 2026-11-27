@@ -81,7 +81,7 @@ The OpenRouter Responses API is **stateless**: "You must include the full conver
 | Instructions | `instructions` | The prompt file for the step with `{{policy}}` filled in. Policies are sent only to the decision and message steps, never to the vision step |
 | Case facts | first `input` item, role `user`, labelled `CASE FACTS (system-computed, trusted)` | `caseType`, `category`, `model`, `purchaseDate`, `today`, `daysSincePurchase`, window flags, `triageSignals` (decisions-model answers with confidence and HIGH/MEDIUM/LOW band, ADR-004 §3.4; given to the vision and decision steps as hypotheses to verify), all `ImageAnalysis` objects as JSON with their index and time |
 | Customer form text | `input` item, role `user`, labelled `CUSTOMER REASON (untrusted)` | The `reason` field |
-| History | following `input` items | Prior turns in order: customer → role `user`, assistant body → role `assistant` |
+| History | following `input` items | Prior turns in order: customer → role `user`, assistant body → role `assistant`. A chat turn with a photo and no text is represented by the trusted marker `CUSTOMER MESSAGE (system-generated, trusted): photo attached, no text` (added 2026-11-26, T29) |
 | Current decision | final `input` item (message steps only) | The validated `Decision` the message must explain, plus `changed`/`previousLabel` |
 | Image | `input_image` part (vision step only) | `data:image/jpeg;base64,…` of the reduced photo. The text part comes first, then the image (OpenRouter image guide) |
 
@@ -176,12 +176,12 @@ To make AC-22, AC-26 and AC-35 order-proof, the assistant message is rendered fr
 |---|---|---|---|
 | Triage (ADR-004) | 8 s | none; on failure, continue without signals | First submission only |
 | Vision | 20 s | none | Turns with a photo |
-| Structured decision | 20 s | none | Every turn |
+| Structured decision | 30 s (amended 2026-11-26 from 20 s: real chat-turn decisions took 12–17 s and one hit 20 s in T27 QA) | none | Every turn |
 | G6 corrective re-ask | the remaining time, max 15 s | only if ≥ 15 s remain | Only when IDs are invalid |
 | Stream: first delta | before the 55 s deadline | none | Every turn |
 | Stream: whole message | 60 s after the `decision` event | none | Every turn |
 
-- **Worst case before `decision`:** 8 + 20 + 20 = 48 s, plus the re-ask only when time remains.
+- **Worst case before `decision`:** every per-call timeout is capped by the time left in the 55 s deadline (`Deadline.callTimeout`), so the budget holds even though 8 + 20 + 30 exceeds it; the re-ask runs only when ≥ 15 s remain.
 - **Retries:** there are no automatic retries (SDK `maxRetries(0)`). The customer retries through "Spróbuj ponownie" (AC-40, AC-41).
 - **Deadline:** if it passes before the `decision` event, the result is `TIMEOUT`.
 - **Frontend watchdog:** the frontend aborts after 60 s without a `decision` event (ADR-003 §3.5).

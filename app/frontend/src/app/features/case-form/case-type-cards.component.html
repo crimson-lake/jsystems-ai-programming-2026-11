@@ -1,0 +1,11 @@
+<span class="type-cards__legend" id="case-type-legend"
+  >{{ legend }}<span aria-hidden="true"> *</span></span
+>
+<mat-radio-group class="type-cards" aria-labelledby="case-type-legend" [formControl]="control()">
+  @for (option of options; track option.value) {
+    <mat-radio-button class="type-card" [value]="option.value">
+      <span class="type-card__title">{{ option.title }}</span>
+      <span class="type-card__desc">{{ option.description }}</span>
+    </mat-radio-button>
+  }
+</mat-radio-group>

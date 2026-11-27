@@ -1,0 +1,33 @@
+{
+  "name" : "decisions-error-invalid-key",
+  "description" : "S-2 (e): invalid API key (literal fake key) -> real 401",
+  "capturedAt" : "2026-11-26T10:14:09.622372855Z",
+  "endpoint" : "POST https://openrouter.ai/api/alpha/decisions",
+  "model" : "openai/gpt-6-luna-decisions",
+  "requestSummary" : "text-only state, 1 noul question; Authorization carries a literal fake key (not stored)",
+  "httpStatus" : 401,
+  "latencyMs" : 226,
+  "bodyFile" : "decisions-error-invalid-key.json",
+  "requestFile" : "decisions-error-invalid-key.request.json",
+  "note" : "Authorization, Cookie and Set-Cookie headers are not stored. Body file is verbatim.",
+  "requestHeaders" : {
+    "content-type" : "application/json",
+    "http-referer" : "http://localhost:8080",
+    "x-openrouter-title" : "Hardware Service Decision Copilot PoC"
+  },
+  "responseHeaders" : {
+    ":status" : "401",
+    "access-control-allow-origin" : "*",
+    "access-control-expose-headers" : "WWW-Authenticate,PAYMENT-REQUIRED,Payment-Receipt,PAYMENT-RESPONSE,Location,X-Generation-Id,x-openrouter-error-origin,x-openrouter-error-tool,X-Provider-Name,request-id,x-openrouter-subscription-passthrough,anthropic-ratelimit-unified-status,Retry-After,cf-ray",
+    "alt-svc" : "h3=\":443\"; ma=86400",
+    "cf-ray" : "a6081fe508a34cd7-WAW",
+    "content-type" : "application/json",
+    "date" : "Thu, 26 Nov 2026 10:14:09 GMT",
+    "permissions-policy" : "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+    "referrer-policy" : "no-referrer, strict-origin-when-cross-origin",
+    "server" : "cloudflare",
+    "server-timing" : "cfEdge;dur=5,cfOrigin;dur=0,cfWorker;dur=161",
+    "x-content-type-options" : "nosniff",
+    "x-openrouter-error-origin" : "client"
+  }
+}

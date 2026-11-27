@@ -1,0 +1,15 @@
+<section class="submit-progress" role="status" aria-live="polite" [attr.aria-label]="title">
+  <mat-progress-bar mode="indeterminate" aria-hidden="true" />
+  <ol class="submit-progress__steps">
+    @for (item of items(); track item.text) {
+      <li
+        class="submit-progress__step"
+        [class.is-current]="item.current"
+        [class.is-done]="item.done"
+        [attr.aria-current]="item.current ? 'step' : null"
+      >
+        {{ item.text }}
+      </li>
+    }
+  </ol>
+</section>

@@ -1,0 +1,12 @@
+event:case
+data: {"caseId":"4c431629-26ab-403a-9d1b-f791ad7d6332"}
+
+event:progress
+data: {"step":"UPLOAD_RECEIVED"}
+
+event:progress
+data: {"step":"ANALYZING_PHOTO"}
+
+event:error
+data: {"code":"AI_UNAVAILABLE","message":"Nie udało się przeanalizować zgłoszenia. Spróbuj ponownie."}
+

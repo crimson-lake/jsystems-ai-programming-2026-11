@@ -1,0 +1,31 @@
+// The ONLY place for brand hex values (ADR-003 section 3.2). Source: assets/design-tokens.json.
+
+// Theme-override values (mat.theme-overrides).
+$primary: #001d4c;
+$on-primary: #ffffff;
+$tertiary: #ff9700;
+$on-tertiary: #ffffff;
+$surface: #ffffff;
+$surface-container-low: #f4f7fc;
+$on-surface-variant: #60708b;
+$outline-variant: #bdbdbd;
+$error: #d32f2f;
+
+// App tokens.
+$header-bg: #0d244c;
+$radius: 8px;
+
+:root {
+  --app-header-bg: #{$header-bg};
+  --app-badge-accepted-bg: #2e7d32;
+  --app-badge-accepted-fg: #ffffff;
+  --app-badge-rejected-bg: #d32f2f;
+  --app-badge-rejected-fg: #ffffff;
+  --app-badge-needs-info-bg: #ff9700;
+  --app-badge-needs-info-fg: #001d4c;
+  --app-badge-escalated-bg: #001d4c;
+  --app-badge-escalated-fg: #ffffff;
+  --app-card-shadow: 0px 8px 10px 0px rgba(0, 0, 0, 0.1);
+  --app-radius: #{$radius};
+  --app-content-width: 1140px;
+}

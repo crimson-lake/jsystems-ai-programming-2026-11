@@ -1,0 +1,16 @@
+{
+  "name": "triage-reset",
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/alpha/decisions"
+  },
+  "response": {
+    "fault": "CONNECTION_RESET_BY_PEER"
+  },
+  "metadata": {
+    "source": "decisions-jev-return-phone-1",
+    "sourceFile": "openrouter-captures/decisions-jev-return-phone-1.meta.json",
+    "note": "verbatim from capture; the body pattern selects the case type",
+    "addition": "fault CONNECTION_RESET_BY_PEER"
+  }
+}

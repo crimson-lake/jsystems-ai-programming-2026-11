@@ -1,0 +1,10 @@
+{
+  "status": 400,
+  "headers": {
+    "content-type": "application/json",
+    "transfer-encoding": "chunked",
+    "date": "Thu, 26 Nov 2026 11:55:53 GMT",
+    "connection": "close"
+  },
+  "body": "{\"code\":\"VALIDATION\",\"fieldErrors\":[{\"field\":\"text\",\"message\":\"Wpisz wiadomość lub dodaj zdjęcie.\"}]}"
+}

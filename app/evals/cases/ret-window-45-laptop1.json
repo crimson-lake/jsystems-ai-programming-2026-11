@@ -1,0 +1,13 @@
+{
+  "id": "ret-window-45-laptop1",
+  "description": "Return 45 days after purchase: outside the window",
+  "caseType": "RETURN",
+  "category": "LAPTOP",
+  "model": "ThinkPad T14",
+  "purchaseDaysAgo": 45,
+  "reason": "Chcę zwrócić to urządzenie, nie spełnia moich oczekiwań.",
+  "photo": "laptop-1.png",
+  "expect": {
+    "windowRejectOrSafety": true
+  }
+}

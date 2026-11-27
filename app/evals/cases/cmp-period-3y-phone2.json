@@ -1,0 +1,15 @@
+{
+  "id": "cmp-period-3y-phone2",
+  "description": "Complaint 3 years after purchase: outside the liability period",
+  "caseType": "COMPLAINT",
+  "category": "SMARTPHONE",
+  "model": "iPhone 12",
+  "purchaseDaysAgo": 0,
+  "purchaseYearsAgo": 3,
+  "reason": "Urządzenie przestało działać prawidłowo i chcę złożyć reklamację.",
+  "photo": "phone-2.jpeg",
+  "expect": {
+    "windowRejectOrSafety": true,
+    "mentionsManufacturerWarranty": true
+  }
+}

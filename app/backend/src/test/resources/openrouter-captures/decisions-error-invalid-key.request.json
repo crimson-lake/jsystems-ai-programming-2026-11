@@ -1,0 +1,1 @@
+{"model":"openai/gpt-6-luna-decisions","state":"Short customer note: hello.","questions":{"is_greeting":{"type":"noul","instructions":"Is the note a greeting?"}}}

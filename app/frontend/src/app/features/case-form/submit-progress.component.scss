@@ -1,0 +1,33 @@
+.submit-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--app-radius);
+  background: var(--mat-sys-surface-container-low);
+}
+
+.submit-progress__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.submit-progress__step {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-large);
+  font-weight: 400;
+
+  &.is-done {
+    color: var(--mat-sys-on-surface);
+  }
+
+  &.is-current {
+    color: var(--mat-sys-primary);
+    font-weight: 700;
+  }
+}

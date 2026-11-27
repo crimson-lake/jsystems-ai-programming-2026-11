@@ -1,0 +1,1 @@
+{"input":[{"content":"Cześć","role":"user","type":"message"}],"instructions":"Odpowiadaj krótko.","model":"openai/gpt-6-luna","reasoning":{"effort":"low"}}

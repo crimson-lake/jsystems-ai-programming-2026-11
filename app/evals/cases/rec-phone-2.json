@@ -1,0 +1,11 @@
+{
+  "id": "rec-phone-2",
+  "description": "Record only: neutral in-window return",
+  "caseType": "RETURN",
+  "category": "SMARTPHONE",
+  "model": "Nokia G42",
+  "purchaseDaysAgo": 6,
+  "reason": "Chcę zwrócić to urządzenie, nie spełnia moich oczekiwań.",
+  "photo": "phone-2.jpeg",
+  "expect": {}
+}

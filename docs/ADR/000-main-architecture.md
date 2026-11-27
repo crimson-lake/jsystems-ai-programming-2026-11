@@ -18,7 +18,7 @@ This ADR set fixes every technical decision the implementing agent needs. Togeth
 | [`001-llm-integration.md`](001-llm-integration.md) | OpenAI Java SDK against OpenRouter, Responses API vs Chat Completions, prompts, decision pipeline, guardrails |
 | [`002-backend.md`](002-backend.md) | Spring Boot + Maven initialization, REST/SSE API, case state, validation, packaging into one JAR |
 | [`003-frontend.md`](003-frontend.md) | Angular + Angular Material initialization, theming, form, chat UI, SSE client, image reduction |
-| [`004-triage-decisions-model.md`](004-triage-decisions-model.md) | Photo triage with the `gpt-6-luna-decisions` model (OpenRouter Decisions API), confidence bands, fast path that skips the LLM for the first decision, `assist` experiment mode |
+| [`004-triage-decisions-model.md`](004-triage-decisions-model.md) | Photo triage with the `typesafe/jev-1.14` decisions model (TypeSafe Jev 1.14; amended 2026-11-26) (OpenRouter Decisions API), confidence bands, fast path that skips the LLM for the first decision, `assist` experiment mode |
 
 Decisions agreed with the product owner on 2026-11-25:
 - Monorepo producing **one runnable JAR**.
@@ -103,7 +103,7 @@ assets/                     Design tokens, logo, favicon, example images (test f
 | Streaming | Server-Sent Events from `POST` endpoints (`SseEmitter`) | One-way server→client token stream; simpler than WebSocket (decision recorded in §8) |
 | AI client | OpenAI Java SDK 4.113.0, OpenRouter base URL, **Responses API** | Official SDK; OpenRouter documents Responses as its primary API (ADR-001) |
 | AI models | `LLM_VISION_MODEL` and `LLM_DECISION_MODEL`, both defaulting to `LLM_MODEL` (`openai/gpt-6-luna`) | Vision and decision can be tuned separately without code changes |
-| Triage model | `LLM_TRIAGE_MODEL` = `openai/gpt-6-luna-decisions` via `POST /api/alpha/decisions` (Spring `RestClient`) | Cheap classification with confidence before the LLM; fast path for clear cases (ADR-004, gated by spike S-2) |
+| Triage model | `LLM_TRIAGE_MODEL` = `typesafe/jev-1.14` via `POST /api/alpha/decisions` (Spring `RestClient`) | Cheap classification with confidence before the LLM; fast path for clear cases (ADR-004, gated by spike S-2) |
 | State | Caffeine `Cache<UUID, CaseSession>`, expire-after-access 60 min | PRD: no persistence; reload ends the case |
 | Frontend | Angular 22.3 (standalone, zoneless, signals) | Requested by the group; current major |
 | UI kit | Angular Material 22.3 (M3) + CDK | Requested. Themeable to the brand tokens; covers every form control |
@@ -171,7 +171,7 @@ The API base path is `/api`. It is JSON except for multipart uploads and SSE str
 |---|---|---|
 | `case` | `{caseId}` | The case was created. Sent first, only by `POST /api/cases` |
 | `progress` | `{step: UPLOAD_RECEIVED \| ANALYZING_PHOTO \| PREPARING_DECISION \| WRITING_REPLY}` | Drives the loading steps (AC-14, PRD §9.1) |
-| `decision` | `{label, previousLabel?, changed, changeReasonPl?, safety, suggestOtherCaseType, ruleIds[]}` | Arrives **before** any text. The UI updates the summary badge (AC-35/36) |
+| `decision` | `{label, previousLabel?, changed, changeReasonPl?, safety, suggestOtherCaseType, ruleIds[]}` | Arrives **before** any text. The UI updates the summary badge (AC-35/36). `previousLabel` is null unless `changed` is true |
 | `delta` | `{text}` | Markdown chunk of the assistant message, appended in order (AC-37) |
 | `done` | `{messageId}` | The message is complete and committed to the case |
 | `error` | `{code: AI_UNAVAILABLE \| TIMEOUT, message}` | A Polish user-facing message. After it the stream closes and nothing is committed. It may arrive before or after `decision`. Validation and missing-case errors are returned before the stream as HTTP errors, never as stream events |
@@ -201,7 +201,7 @@ The API base path is `/api`. It is JSON except for multipart uploads and SSE str
 | `LLM_DECISION_REASONING_EFFORT` | Reasoning effort for the structured decision call | No | `medium` (default) |
 | `OPENROUTER_APP_TITLE` | Sent as `X-OpenRouter-Title` for OpenRouter attribution | No | `Hardware Service Decision Copilot PoC` |
 | `OPENROUTER_APP_URL` | Sent as `HTTP-Referer` | No | `http://localhost:8080` |
-| `LLM_TRIAGE_MODEL` | Decisions model for photo triage | No | `openai/gpt-6-luna-decisions` (default) |
+| `LLM_TRIAGE_MODEL` | Decisions model for photo triage | No | `typesafe/jev-1.14` (default; pinned version) |
 | `TRIAGE_MODE` | `off`, `assist` (signals + logged fast-path comparison) or `fast-path`. `fast-path` is not enabled in the PoC (ADR-004 D-T2) | No | `assist` (default) |
 | `TRIAGE_LOW_CONFIDENCE` / `TRIAGE_HIGH_CONFIDENCE` | Confidence bands (ADR-004 D-T2) | No | `0.80` / `0.95` |
 | `TRIAGE_SAFETY_PROBABILITY` | P(safety hazard) that forces escalation | No | `0.30` |
@@ -276,7 +276,7 @@ The API base path is `/api`. It is JSON except for multipart uploads and SSE str
 **Context:** AC-15 requires the system to reduce photos without customer action. Photos can be up to 10 MB, and VM upload bandwidth and model token cost matter.
 **Decision:**
 - The browser validates the **original** file (type and ≤10 MB, AC-09/10).
-- It then re-encodes the photo to JPEG with the longest edge ≤1600 px at quality 0.85, and uploads only the reduced file.
+- It then re-encodes the photo to JPEG with the longest edge ≤1568 px at quality 0.85, and uploads only the reduced file. **1568 px (amended 2026-11-26 from 1600)** is the per-side maximum of the triage model TypeSafe Jev 1.14 (ADR-004 §2), so the same JPEG serves triage and vision.
 - The backend re-validates the type (magic bytes) and the size (≤10 MB) but does not resize.
 **Rejected alternatives:**
 - Server-side resize: up to 10 MB uploads per photo, plus an image library on the server.
@@ -309,9 +309,9 @@ The API base path is `/api`. It is JSON except for multipart uploads and SSE str
 **Review trigger:** A shared demo environment is needed.
 
 ### D-09 Triage with a decisions model before the LLM; confidence-based fast path
-**Status:** Accepted (gated by spike S-2) · **Date:** 2026-11-25, amended 2026-11-26
+**Status:** Accepted (spike S-2 passed with `typesafe/jev-1.14`) · **Date:** 2026-11-25, amended 2026-11-26
 **Decision:**
-- The **first submission only** runs `openai/gpt-6-luna-decisions` on the photo and form through OpenRouter's alpha Decisions API. Chat photos are not triaged.
+- The **first submission only** runs `typesafe/jev-1.14` on the photo and form through OpenRouter's alpha Decisions API. Chat photos are not triaged.
 - The answers (category, usability, damage, condition, cause, safety, consistency, each with a confidence) are passed to the LLM as signals to verify. Signals below 0.80 are marked LOW.
 - A triage safety signal escalates the case in every mode (ADR-001 G1).
 - When every relevant answer is ≥ 0.95 and the outcome is low-risk, the first decision could skip the LLM (`TRIAGE_MODE=fast-path`). **This mode is not enabled in the PoC.** Its eval criteria cannot be met with the photo assets the course allows (PRD §12, 2026-11-26).
@@ -328,7 +328,7 @@ The API base path is `/api`. It is JSON except for multipart uploads and SSE str
 flowchart LR
   subgraph Browser
     UI[Angular 22 SPA<br/>Material + CDK]
-    RED[Photo reducer<br/>canvas → JPEG ≤1600px]
+    RED[Photo reducer<br/>canvas → JPEG ≤1568px]
     SSEC[SSE client<br/>fetch + eventsource-parser]
     UI --> RED
     UI --> SSEC

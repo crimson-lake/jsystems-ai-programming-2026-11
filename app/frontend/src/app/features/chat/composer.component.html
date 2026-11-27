@@ -1,0 +1,56 @@
+<form class="composer" novalidate (submit)="$event.preventDefault()">
+  @if (photo(); as p) {
+    <div class="composer__preview" data-testid="composer-photo">
+      <img class="composer__thumb" alt="" [src]="p.objectUrl" />
+      <span class="composer__name">{{ p.originalName }}</span>
+      <button mat-button type="button" [attr.aria-label]="removeLabel" (click)="removePhoto()">
+        {{ removeText }}
+      </button>
+    </div>
+  }
+  <mat-form-field class="composer__field" subscriptSizing="dynamic">
+    <mat-label>{{ label }}</mat-label>
+    <textarea
+      #field
+      matInput
+      cdkTextareaAutosize
+      cdkAutosizeMinRows="1"
+      cdkAutosizeMaxRows="6"
+      [value]="text()"
+      [errorStateMatcher]="matcher"
+      [aria-describedby]="describedBy()"
+      (input)="onInput($event)"
+      (keydown.enter)="onEnter($event)"
+    ></textarea>
+  </mat-form-field>
+  @if (errorText(); as message) {
+    <p class="composer__error" id="composer-error" role="alert">{{ message }}</p>
+  }
+  @if (!store.canAttachPhoto()) {
+    <p class="composer__hint" id="composer-limit">{{ limitText }}</p>
+  }
+  <div class="composer__actions">
+    <input
+      #fileInput
+      type="file"
+      hidden
+      accept="image/jpeg,image/png,image/webp"
+      (change)="onFileChange($event)"
+    />
+    <button
+      mat-stroked-button
+      type="button"
+      [disabled]="!store.canAttachPhoto()"
+      [attr.aria-describedby]="store.canAttachPhoto() ? null : 'composer-limit'"
+      (click)="openFilePicker()"
+    >
+      {{ attachText }}
+    </button>
+    <span class="composer__counter" id="composer-counter" [class.is-over]="tooLong()"
+      >{{ text().length }}/{{ max }}</span
+    >
+    <button mat-flat-button type="button" [disabled]="!canSubmit()" (click)="submit()">
+      {{ sendText }}
+    </button>
+  </div>
+</form>

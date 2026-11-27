@@ -1,0 +1,39 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.message-list__wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.message-list {
+  flex: 1 1 auto;
+  box-sizing: border-box;
+  min-height: 240px;
+  max-height: min(65dvh, 640px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.message-list__content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-sizing: border-box;
+  padding: 16px;
+}
+
+.message-list__new {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: var(--mat-sys-level2);
+}

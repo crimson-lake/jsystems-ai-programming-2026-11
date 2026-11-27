@@ -1,0 +1,11 @@
+{
+  "id": "rec-laptop-1",
+  "description": "Record only: neutral in-window return",
+  "caseType": "RETURN",
+  "category": "LAPTOP",
+  "model": "Acer Aspire 5",
+  "purchaseDaysAgo": 7,
+  "reason": "Chcę zwrócić to urządzenie, nie spełnia moich oczekiwań.",
+  "photo": "laptop-1.png",
+  "expect": {}
+}

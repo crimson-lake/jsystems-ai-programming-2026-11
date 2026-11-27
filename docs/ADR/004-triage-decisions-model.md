@@ -1,14 +1,16 @@
 # ADR-004: Photo Triage with a Decisions Model and a Confidence-Based Fast Path
 
 **Date:** 2026-11-25
-**Status:** Accepted (implementation gated by spike S-2). **The PoC ships `assist` mode only; the fast path is disabled** (D-T2 amendment, 2026-11-26)
+**Status:** Accepted (spike S-2 passed with `typesafe/jev-1.14` on 2026-11-26). **The PoC ships `assist` mode only; the fast path is disabled** (D-T2 amendment, 2026-11-26)
+
+> **Amendment 2026-11-26 (product owner): decisions model changed to TypeSafe Jev 1.14.** The first S-2 run with `openai/gpt-6-luna-decisions` got an upstream 401 `account_deactivated`. The product owner chose **`typesafe/jev-1.14`** (pinned version, not the `~typesafe/jev-latest` alias). S-2 was re-run with it and passed. The changes are marked *Jev 1.14* in this ADR: §2 facts, §3.3 request format and image limits, §4 `TriageAnswer`, §5 defaults, D-T1 and D-T2.
 **Relates to:** [`000-main-architecture.md`](000-main-architecture.md), [`001-llm-integration.md`](001-llm-integration.md), [`002-backend.md`](002-backend.md)
 
 ---
 
 ## 1. Scope
 
-This ADR adds a **triage stage** before the multimodal LLM. The stage uses a *decisions* model, `openai/gpt-6-luna-decisions` on OpenRouter, which answers typed questions about the photo and form data with a probability per option and a confidence score. Its answers are used in three ways:
+This ADR adds a **triage stage** before the multimodal LLM. The stage uses a *decisions* model, **`typesafe/jev-1.14`** (TypeSafe Jev 1.14) on OpenRouter, which answers typed questions about the photo and form data with a probability per option and a confidence score. Its answers are used in three ways:
 
 1. **Signals for the LLM.** The triage answers, with their confidence, are passed to the vision and decision LLM calls (ADR-001) as pre-computed signals to verify. Answers below 80% confidence are explicitly marked as uncertain.
 2. **Fast path.** When every answer that a decision depends on has very high confidence (≥ 95%, configurable) and the outcome is in the allowed fast-path set (§3.5), the first decision is produced **without any LLM call**. The first message is rendered from templates, and the LLM is used only in the subsequent chat.
@@ -23,11 +25,12 @@ This ADR adds a **triage stage** before the multimodal LLM. The stage uses a *de
 | Item | Source | Verified facts (2026-11-25) |
 |---|---|---|
 | OpenRouter Decisions API | https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-request.md; SDK listing https://openrouter.ai/docs/client-sdks/typescript/sdks/decisions/README.md | `POST /api/alpha/decisions`. "Alpha: the shape may change." Request requires `model`, `state` and `questions`; optional fields are `assets`, `provider`, `session_id`, `trace` and `user`. Question types: `noul` (yes/no, with `criteria.false`/`criteria.true`), `choice` (criteria map of option to description), `score` (ordered labels) and `box` (TypeSafe endpoints only). Response: `answers[key]` with the value, `probabilities` (choice/score) and `confidence`, plus `usage.cost` in credits. Images go in `state` as `image_url` parts, or once in `assets` as PNG/JPEG standard base64 without a `data:` prefix. No `stream` field. Errors: 400, 401, 402, 403, 404, 413, 429, 500, 502, 503, 524, 529 |
-| `openai/gpt-6-luna-decisions` | https://openrouter.ai/openai (provider model list) | **Only the slug is listed.** The model page (`/openai/gpt-6-luna-decisions`) and its `llms.txt` return 404. Description, image support, pricing and the endpoint it is served on are **not verified** |
+| `openai/gpt-6-luna-decisions` (replaced) | https://openrouter.ai/openai (provider model list) | Listed, but S-2 got an upstream 401 `account_deactivated` on 2026-11-26. **No longer used** |
+| **`typesafe/jev-1.14`** (*Jev 1.14*, verified 2026-11-26) | https://openrouter.ai/typesafe/jev-1.14; https://openrouter.ai/docs/guides/features/decisions | TypeSafe "System One" structured decision model; no free text. Input text + images, **PNG/JPEG only** (no WebP), **256–1,568 px per side**, 78,400–2,458,624 px in total (too small → 400, too large → 413), EXIF orientation not applied. Context 262,144 tokens. Price $0.042/M input tokens, $0 output. Only provider: TypeSafe. Every request with an image runs in TypeSafe's long-context mode ("slower and less accurate"). The docs state the probabilities are calibrated but say thresholds must be picked again per model. Responses report a dated slug (`typesafe/jev-1.14-20261014`). Same endpoint and envelope as before; `box` questions exist on Jev only and are not used here |
 | OpenRouter "decisions" output modality | https://openrouter.ai/models | "decisions: 39 models". Example decision models (Baseten Groundhog 1, Bison 1) take "text, image -> decisions" and return "a calibrated probability for every option in a single forward pass, with no text generation". No Luna model is described there |
 | Spring `RestClient` | `/spring-projects/spring-framework/v7.0.5` | HTTP client for the Decisions endpoint. The OpenAI Java SDK has no method for this OpenRouter-specific alpha endpoint |
 
-> **Unverified assumption:** `gpt-6-luna-decisions` is served on `/api/alpha/decisions` and accepts JPEG images, and its `confidence` is usable as a probability of being correct. Spike S-2 (§6, D-T1) must confirm all three before production code is written.
+> **Verified by S-2 (2026-11-26, *Jev 1.14*):** `typesafe/jev-1.14` is served on `POST https://openrouter.ai/api/alpha/decisions`, accepts a JPEG asset and answers `noul`, `choice` and `score` questions (latency 0.5–1.1 s, upstream cost ≈ $0.0002–0.0003 per photo). Whether `confidence` is calibrated on our questions is still unknown, so the fast path stays disabled (D-T2).
 
 ---
 
@@ -47,7 +50,7 @@ photo + form → [TRIAGE: decisions model] → router ─┬─ fast path → ru
 
 | Component | Responsibility |
 |---|---|
-| `TriageProperties` | `mode` (`off \| assist \| fast-path`, default `assist`), `model` (`LLM_TRIAGE_MODEL`, default `openai/gpt-6-luna-decisions`), `lowConfidence` (default 0.80), `highConfidence` (default 0.95), `safetyProbability` (default 0.30), `timeout` (default 8 s), `baseUrl` (default `https://openrouter.ai/api/alpha/decisions`) |
+| `TriageProperties` | `mode` (`off \| assist \| fast-path`, default `assist`), `model` (`LLM_TRIAGE_MODEL`, default `typesafe/jev-1.14`), `lowConfidence` (default 0.80), `highConfidence` (default 0.95), `safetyProbability` (default 0.30), `timeout` (default 8 s), `baseUrl` (default `https://openrouter.ai/api/alpha/decisions`) |
 | `DecisionsApiClient` | The only class that knows the alpha wire format. It uses Spring `RestClient` with a bearer `OPENROUTER_API_KEY`, the attribution headers and an 8 s timeout (ADR-001 §3.6 budget), and makes no retries (the budget is too small). It maps HTTP errors and `refusal` answers to `TriageUnavailable` |
 | `TriageQuestionSet` | Builds the questions per case type from `classpath:triage/questions-return.json` and `questions-complaint.json` (versioned files, reviewed like prompts) |
 | `TriageService` | Builds `state` (form facts + photo reference), calls the client and maps the answers to `TriageResult` |
@@ -58,9 +61,11 @@ photo + form → [TRIAGE: decisions model] → router ─┬─ fast path → ru
 
 ### 3.3 Triage questions
 
-State sent to the model:
-- a JSON object with `caseType`, `formCategory`, `model`, `daysSincePurchase`, `reason` (customer text);
-- the photo as one JPEG asset referenced as `photo`. The browser already re-encodes every photo to JPEG (ADR-000 D-06), which satisfies the "PNG or JPEG" asset constraint.
+State sent to the model (*Jev 1.14* wire format, recorded in `openrouter-captures/decisions-jev-*.request.json`):
+- `state` is an **array**: first a JSON object with `caseType`, `formCategory`, `model`, `daysSincePurchase`, `reason` (customer text), then a random **UUID string** that references the photo asset. Jev also matches an asset key inside longer text, so the key is always a fresh UUID that cannot occur in customer text;
+- `assets` is a map `{<uuid>: {"type": "image", "format": "jpeg", "data_base64": "<standard base64, no data: prefix>"}}` (`jpeg` as in the recorded successful request; the API also accepts `jpg` and `png`). Every asset must be referenced, or the request fails with 400;
+- `questions` is a **map** keyed by the question keys below; each entry has `type`, `instructions` and `criteria` (`noul`: `{"true": …, "false": …}`; `choice`: option → description; `score`: an **array** ordered from lowest to highest);
+- the photo is the JPEG the browser already produced (ADR-000 D-06): JPEG satisfies Jev's PNG/JPEG rule, and the reducer's longest edge of **1,568 px** satisfies Jev's 256–1,568 px per side. A photo with a side under 256 px (not among the example photos) gets a 400 and the router falls back to the LLM path (T0).
 
 | Key | Type | Options / labels | Used for | Case types |
 |---|---|---|---|---|
@@ -109,7 +114,7 @@ The router takes the **first** matching row. "All ≥ H" means every listed ques
 Rejections based on photo interpretation (R3.4, C4) and every complaint merits decision always go to the LLM. A wrong automatic rejection is the costliest error for the customer (PRD P2), and AC-27 already forbids rejecting on uncertain causes.
 
 - **`assist` mode:** T1–T5 are evaluated but never taken. The would-be fast-path label is logged against the LLM label.
-- **`fast-path` mode:** T1–T5 are taken.
+- **`fast-path` mode:** T1–T5 are taken. **In the PoC (D-T2 amendment) the value `fast-path` is accepted but routed exactly like `assist`; no templates exist.**
 
 ### 3.6 Fast-path first message
 
@@ -142,16 +147,20 @@ The message has the same segments as LLM messages (ADR-001 §3.5): safety block,
 
 ## 4. Data Structures
 
-- `TriageAnswer`:
+- `TriageAnswer` (*Jev 1.14*: amended to the recorded wire format):
   - `key`;
   - `type` (`noul|choice|score`);
-  - `value` (boolean / option / label);
-  - `probabilities` (map, optional);
-  - `confidence` (0–1);
-  - `band` (`HIGH|MEDIUM|LOW`);
-  - `refused` (bool).
+  - `value`: Boolean for `noul` (`probabilityTrue ≥ 0.5`), the option key for `choice`, the legend label with the highest probability for `score`; null when refused;
+  - `probabilityTrue` (`noul` only): the wire value. **Jev answers `noul` with a number, P(true), and no `confidence`** (e.g. `{"type":"noul","noul":0.13}`);
+  - `score` (`score` only): the probability-weighted position 0..N−1 as returned (e.g. 2.96);
+  - `probabilities` (map, optional): `choice` as returned; `score` re-keyed from `"0".."N-1"` to the `legend` labels; `noul` as `{true: p, false: 1−p}`;
+  - `confidence` (0–1): as returned for `choice` and `score`; **derived as `max(p, 1−p)` for `noul`**;
+  - `confidenceDerived` (bool): true when `confidence` was computed;
+  - `band` (`HIGH|MEDIUM|LOW`) from `confidence`;
+  - `refused` (bool): the answer was `{"type":"refusal"}`, or the key was missing or had an unexpected type (fail closed).
+- **Safety (T1/G1)** reads `probabilityTrue` of `safety_hazard` directly against `TRIAGE_SAFETY_PROBABILITY`, at any confidence.
 - `TriageResult`:
-  - `model`;
+  - `model` (the slug the response reports, e.g. the dated `typesafe/jev-1.14-20261014`; never compared to the requested slug by equality);
   - `answers` (map key → `TriageAnswer`);
   - `latencyMs`;
   - `costCredits`;
@@ -180,7 +189,7 @@ The message has the same segments as LLM messages (ADR-001 §3.5): safety block,
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LLM_TRIAGE_MODEL` | `openai/gpt-6-luna-decisions` | Decisions model |
+| `LLM_TRIAGE_MODEL` | `typesafe/jev-1.14` | Decisions model (*Jev 1.14*, pinned) |
 | `TRIAGE_MODE` | `assist` | `off \| assist \| fast-path` |
 | `TRIAGE_LOW_CONFIDENCE` | `0.80` | Below this, a signal is LOW and the case is routed to the LLM |
 | `TRIAGE_HIGH_CONFIDENCE` | `0.95` | At or above this, a signal counts for the fast path |
@@ -200,13 +209,14 @@ The message has the same segments as LLM messages (ADR-001 §3.5): safety block,
 **Decision:**
 - Implement `triage` as described in this ADR.
 - **Spike S-2** must run before any production triage code. It uses the unedited example photos in `assets/example-images/` (no description of their content in `state`) and the capture procedure from AGENTS.md, and checks the following:
-  - (a) `POST /api/alpha/decisions` with `model=openai/gpt-6-luna-decisions` returns 200.
+  - (a) `POST /api/alpha/decisions` with the configured model returns 200 (run 1: `openai/gpt-6-luna-decisions`; run 2: `typesafe/jev-1.14`).
   - (b) A JPEG asset and the three question types used here (`noul`, `choice`, `score`) are accepted.
   - (c) The `answers[*].confidence` and `probabilities` shapes are as documented.
   - (d) Latency and `usage.cost` per case are recorded.
   - (e) Real error responses are recorded for the fallback tests: an invalid key (401) and an invalid model ID. Stubs for other errors are not invented (ADR-001 S-1 rule).
 - Capture the responses verbatim to `app/backend/src/test/resources/openrouter-captures/decisions-*.json`.
 - If (a) or (b) fails, set `TRIAGE_MODE=off`, record the finding in this ADR and ask the product owner whether to use another decisions-modality model (e.g. one of the 39 listed models that declare image input).
+- **Outcome (2026-11-26):** run 1 with `openai/gpt-6-luna-decisions` failed (upstream 401 `account_deactivated`). The product owner chose `typesafe/jev-1.14`; run 2 passed (a)–(e): 200 with all questions answered for a RETURN (`phone-1.jpg`) and a COMPLAINT (`laptop-1.png` reduced to 1512×1568 JPEG, as the browser would send it), plus the real 401 and invalid-model 400. Captures: `decisions-jev-*`.
 **Rejected alternatives:**
 - Using the multimodal LLM itself to self-report a confidence: verbalized LLM confidence is a generated number, not a probability over options, and it adds no cost or latency saving.
 - Using logprobs from the LLM: logprob support for `gpt-6-luna` is not documented on its OpenRouter page.
@@ -227,6 +237,8 @@ The message has the same segments as LLM messages (ADR-001 §3.5): safety block,
 > - The precision criteria below therefore **cannot be met in the PoC**, so `fast-path` mode stays disabled.
 > - The PoC ships `assist` mode. The agreement log and the eval report record triage answers and LLM labels without pass/fail.
 > - Enabling the fast path requires an approved, separately curated eval photo set (future work).
+>
+> **Note for Jev 1.14 (2026-11-26):** TypeSafe documents calibrated probabilities but tells users to re-pick thresholds per model. The 0.80/0.95/0.30 defaults are kept as starting values and are re-examined from the T43 triage record; `noul` confidence is derived (§4), so its bands mean "how far P(true) is from 0.5".
 **Context:**
 - The product owner proposed 80% as the "low" boundary.
 - Whether the model's `confidence` is **calibrated** (i.e. 0.95 means right about 95% of the time) is not documented for Luna. OpenRouter's catalogue claims calibration only for the Baseten decision models.
@@ -275,7 +287,7 @@ The message has the same segments as LLM messages (ADR-001 §3.5): safety block,
 flowchart TD
   A[First submission: form + reduced JPEG] --> M{TRIAGE_MODE}
   M -- off --> L[LLM path: vision + decision<br/>ADR-001]
-  M -- assist / fast-path --> T[Decisions API<br/>gpt-6-luna-decisions]
+  M -- assist / fast-path --> T[Decisions API<br/>typesafe/jev-1.14]
   T -->|error / timeout / refusal| L
   T --> R{Router T1..T7}
   R -- "T6: any signal < 0.80" --> L2[LLM path<br/>signals marked LOW]
@@ -371,5 +383,6 @@ sequenceDiagram
 
 ### Open questions
 - **Q-T1:** Does `openai/gpt-6-luna-decisions` exist on the Decisions endpoint with image input? Spike S-2 answers this. If not, which decisions-modality model should be used?
+  - **Answer (2026-11-26):** `openai/gpt-6-luna-decisions` is listed but not servable (upstream 401 `account_deactivated`). The product owner replaced it with **`typesafe/jev-1.14`**, which passed S-2 with image input. Resolved.
 - **Q-T2:** Should fast-path acceptance also require `protective_film_visible=true` for categories that ship with film (R3.1)? The current rule does not require it, because a single photo often cannot show it, and the decision is preliminary (R5.3).
 - **Q-T3:** Is 98% the right precision target for switching the fast path on? This is moot in the PoC, because the fast path is disabled (D-T2 amendment).

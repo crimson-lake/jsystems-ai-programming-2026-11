@@ -1,0 +1,31 @@
+{
+  "name": "error-401",
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/alpha/decisions"
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "access-control-allow-origin": "*",
+      "access-control-expose-headers": "WWW-Authenticate,PAYMENT-REQUIRED,Payment-Receipt,PAYMENT-RESPONSE,Location,X-Generation-Id,x-openrouter-error-origin,x-openrouter-error-tool,X-Provider-Name,request-id,x-openrouter-subscription-passthrough,anthropic-ratelimit-unified-status,Retry-After,cf-ray",
+      "alt-svc": "h3=\":443\"; ma=86400",
+      "cf-ray": "a6087a0d1caf45c1-WAW",
+      "content-type": "application/json",
+      "date": "Thu, 26 Nov 2026 11:15:42 GMT",
+      "permissions-policy": "payment=(self \"https://checkout.stripe.com\" \"https://connect-js.stripe.com\" \"https://js.stripe.com\" \"https://*.js.stripe.com\" \"https://hooks.stripe.com\")",
+      "referrer-policy": "no-referrer, strict-origin-when-cross-origin",
+      "server": "cloudflare",
+      "server-timing": "cfEdge;dur=3,cfOrigin;dur=0,cfWorker;dur=155",
+      "x-content-type-options": "nosniff",
+      "x-openrouter-error-origin": "client"
+    },
+    "bodyFileName": "decisions-jev-error-invalid-key.json"
+  },
+  "metadata": {
+    "source": "decisions-jev-error-invalid-key",
+    "sourceFile": "openrouter-captures/decisions-jev-error-invalid-key.meta.json",
+    "note": "verbatim from capture; the body pattern selects the case type",
+    "addition": "none"
+  }
+}

@@ -135,7 +135,7 @@ Boot 4 points the implementing agent must respect (from the 4.0 migration guide 
    4. Turn running: 409 `CASE_BUSY`.
    5. Validation: 400.
    6. Photo limit: 422.
-1. Acquire the case's `ReentrantLock` with `tryLock()`. If it is busy, return **409** so that two concurrent turns cannot interleave history.
+1. Reserve the case atomically on the request thread (`running.putIfAbsent(caseId, …)`; amended 2026-11-26: a `ReentrantLock` taken on the request thread cannot be released by the turn executor thread). If it is already reserved, return **409** so that two concurrent turns cannot interleave history. The turn thread then holds the session's `ReentrantLock` while it reads and commits.
 2. Build a **working copy** of the turn: user message, new analysis and incremented photo counter.
 3. Run the pipeline (ADR-001) and emit `progress`, then `decision`, then `delta` events.
 4. On success, **commit atomically**: append the user message, analysis and assistant message, set `currentDecision` and `additionalPhotoCount`, re-`put` the session into the store, and then emit `done`.
@@ -270,7 +270,7 @@ The Angular output folder `dist/<project>/browser` is the `@angular/build:applic
 | `openrouter.base-url` | `${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}` |
 | `openrouter.vision-model` / `decision-model` | `${LLM_VISION_MODEL:${LLM_MODEL}}` / `${LLM_DECISION_MODEL:${LLM_MODEL}}` |
 | `openrouter.decision-reasoning-effort` | `${LLM_DECISION_REASONING_EFFORT:medium}` |
-| `triage.mode` / `model` / `low-confidence` / `high-confidence` / `safety-probability` / `base-url` / `timeout` | `${TRIAGE_MODE:assist}` / `${LLM_TRIAGE_MODEL:openai/gpt-6-luna-decisions}` / `${TRIAGE_LOW_CONFIDENCE:0.80}` / `${TRIAGE_HIGH_CONFIDENCE:0.95}` / `${TRIAGE_SAFETY_PROBABILITY:0.30}` / `${OPENROUTER_DECISIONS_URL:https://openrouter.ai/api/alpha/decisions}` / `8s` (ADR-001 §3.6) |
+| `triage.mode` / `model` / `low-confidence` / `high-confidence` / `safety-probability` / `base-url` / `timeout` | `${TRIAGE_MODE:assist}` / `${LLM_TRIAGE_MODEL:typesafe/jev-1.14}` / `${TRIAGE_LOW_CONFIDENCE:0.80}` / `${TRIAGE_HIGH_CONFIDENCE:0.95}` / `${TRIAGE_SAFETY_PROBABILITY:0.30}` / `${OPENROUTER_DECISIONS_URL:https://openrouter.ai/api/alpha/decisions}` / `8s` (ADR-001 §3.6) |
 | `openrouter.app-title` / `app-url` | `${OPENROUTER_APP_TITLE:Hardware Service Decision Copilot PoC}` / `${OPENROUTER_APP_URL:http://localhost:8080}` |
 
 ---

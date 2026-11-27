@@ -1,0 +1,14 @@
+{
+  "id": "ret-english-question-laptop1",
+  "description": "English chat question after a return: reply must be Polish and state the form date",
+  "caseType": "RETURN",
+  "category": "LAPTOP",
+  "model": "Asus Zenbook",
+  "purchaseDaysAgo": 12,
+  "reason": "Chcę zwrócić to urządzenie, nie spełnia moich oczekiwań.",
+  "photo": "laptop-1.png",
+  "chatFollowUp": "What date did I give as the purchase date?",
+  "expect": {
+    "polishReplyWithDate": true
+  }
+}

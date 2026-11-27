@@ -1,0 +1,59 @@
+// OpenCode headless worker configuration (plan docs/plans/poc-implementation-plan.md §4.2).
+// Installed OpenCode is 1.19 (V1 config): "permission" maps each tool to ordered patterns, last match wins.
+// V1 has no "policies" block, so the hard denies are the final patterns of each map.
+// The OpenRouter key lives in OpenCode's credential store, never in this file.
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openrouter/openai/gpt-6-luna",
+  "permission": {
+    "edit": {
+      "*": "deny",
+      "*app/backend/src/*": "allow",
+      "*app/frontend/src/*": "allow",
+      "*app/e2e/tests/*": "allow",
+      "*app/evals/*": "allow",
+      "*.env*": "deny",
+      "*pom.xml": "deny",
+      "*package.json": "deny",
+      "*package-lock.json": "deny",
+      "*angular.json": "deny",
+      "*opencode.jsonc": "deny",
+      "*AGENTS.md": "deny",
+      "*CLAUDE.md": "deny",
+      "*.claude/*": "deny",
+      "*docs/*": "deny"
+    },
+    "bash": {
+      "*": "deny",
+      "./mvnw -Pno-frontend test*": "allow",
+      "./mvnw -Pno-frontend verify*": "allow",
+      "sh mvnw -Pno-frontend *": "allow",
+      "npm test*": "allow",
+      "npm run build*": "allow",
+      "npm run lint*": "allow",
+      "npx ng test*": "allow",
+      "npx playwright test*": "allow",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "npm install*": "deny",
+      "npm i *": "deny",
+      "npx ng add*": "deny",
+      "npx ng generate*": "deny",
+      "git commit*": "deny",
+      "git push*": "deny",
+      "git reset*": "deny",
+      "git checkout*": "deny",
+      "git restore*": "deny",
+      "git stash*": "deny",
+      "git clean*": "deny",
+      "rm *": "deny",
+      "mv *": "deny",
+      "find * -delete*": "deny",
+      "curl *": "deny",
+      "wget *": "deny"
+    },
+    "webfetch": "deny",
+    "websearch": "deny",
+    "external_directory": "deny"
+  }
+}

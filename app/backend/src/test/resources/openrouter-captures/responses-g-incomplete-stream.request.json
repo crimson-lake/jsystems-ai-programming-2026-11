@@ -1,0 +1,1 @@
+{"input":[{"content":"Opisz szczegółowo, w co najmniej dziesięciu zdaniach, proces reklamacji sprzętu elektronicznego.","role":"user","type":"message"}],"instructions":"Odpowiadaj po polsku.","max_output_tokens":16,"model":"openai/gpt-6-luna","reasoning":{"effort":"medium"},"stream":true}

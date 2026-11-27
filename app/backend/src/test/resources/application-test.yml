@@ -1,0 +1,10 @@
+# Dummy values only. Profile "test" never imports .env.
+openrouter:
+  api-key: test-dummy-key
+  base-url: http://localhost:0/api/v1   # overridden by WireMock in integration tests
+  vision-model: test/vision-model
+  decision-model: test/decision-model
+triage:
+  mode: "assist"   # T29: ITs serve the recorded Jev answers (wiremock/*/stubs/triage-*.json)
+  model: test/triage-model
+  base-url: http://localhost:0/api/alpha/decisions   # overridden by WireMock in integration tests

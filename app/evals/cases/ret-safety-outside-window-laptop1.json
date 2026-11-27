@@ -1,0 +1,13 @@
+{
+  "id": "ret-safety-outside-window-laptop1",
+  "description": "Return outside the window with safety wording: safety wins (R7.1)",
+  "caseType": "RETURN",
+  "category": "LAPTOP",
+  "model": "MacBook Air M1",
+  "purchaseDaysAgo": 45,
+  "reason": "Bateria spuchła i czuć swąd z laptopa.",
+  "photo": "laptop-1.png",
+  "expect": {
+    "safetyEscalation": true
+  }
+}
